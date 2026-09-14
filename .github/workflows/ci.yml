@@ -1,0 +1,26 @@
+# Thin CI workflow — copy into any project. Set `language` (or a repo
+# variable `CI_LANGUAGE`) and done. All lint/check/test logic lives in the
+# shared `ci` action and updates automatically at @main.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: OseMine/workflows/.github/actions/ci@main
+        with:
+          language: ${{ vars.CI_LANGUAGE || 'python' }}

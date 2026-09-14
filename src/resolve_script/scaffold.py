@@ -1,0 +1,119 @@
+"""Scaffolder for ``resolvescript create``.
+
+Templates are plain files with ``@KEY@`` placeholders (stdlib substitution, no
+Jinja dependency). Every placeholder-keyed file in the template tree is copied
+into the new project; the ``{{ name }}`` package directory is instantiated to
+the project name.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterator
+from pathlib import Path
+
+from . import __version__
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+DEFAULT_VERSION = "0.1.0"
+
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+class ScaffoldError(Exception):
+    pass
+
+
+def normalize_name(name: str) -> str:
+    """Collapse a requested name into a valid Python package identifier."""
+    slug = re.sub(r"[^A-Za-z0-9_]+", "_", name).strip("_")
+    if not _NAME_RE.match(slug):
+        raise ScaffoldError(f"'{name}' cannot be used as a project/package name (got '{slug}')")
+    return slug
+
+
+def render(text: str, values: dict[str, str]) -> str:
+    """Substitute ``@KEY@`` placeholders, preserving leftover placeholders."""
+
+    def _sub(match: re.Match[str]) -> str:
+        key = match.group(1)
+        return values.get(key, match.group(0))
+
+    return re.sub(r"@([A-Za-z0-9_]+)@", _sub, text)
+
+
+def _walk_templates(root: Path) -> Iterator[Path]:
+    return (p for p in root.rglob("*") if p.is_file())
+
+
+def build_values(name: str, **overrides: str) -> dict[str, str]:
+    values = {
+        "NAME": name,
+        "VERSION": DEFAULT_VERSION,
+        "DESCRIPTION": f"{name} — a DaVinci Resolve script built with ResolveScript",
+        "AUTHOR": "",
+        "RESOLVESCRIPT_VERSION": __version__,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            values[key.upper()] = value
+    return values
+
+
+def scaffold_project(
+    name: str,
+    *,
+    destination: Path | None = None,
+    fmt: str = "json",
+    template: str = "minimal",
+    description: str = "",
+    author: str = "",
+) -> tuple[Path, list[str]]:
+    """Create a new extension project.
+
+    Returns ``(project_root, written_relative_paths)``.
+    """
+    pkg_name = normalize_name(name)
+    if template != "minimal":
+        raise ScaffoldError(f"unknown template '{template}' (available: minimal)")
+
+    try:
+        project_dir = (destination or Path.cwd()) / name
+    except TypeError as exc:
+        raise ScaffoldError(f"invalid destination: {destination!r}") from exc
+
+    project_dir = project_dir.resolve()
+    if project_dir.exists():
+        has_entries = any(project_dir.iterdir())
+        if has_entries:
+            raise ScaffoldError(f"destination {project_dir} already exists and is not empty")
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    template_root = TEMPLATES_DIR / "extension"
+    if not template_root.is_dir():
+        raise ScaffoldError(f"template tree missing at {template_root}")
+
+    selected_manifest = f"manifest.{fmt}.j2"
+    if fmt not in {"json", "xml"}:
+        raise ScaffoldError(f"unknown manifest format '{fmt}' (json|xml)")
+
+    values = build_values(
+        pkg_name,
+        description=description,
+        author=author,
+    )
+
+    written: list[str] = []
+    for src in _walk_templates(template_root):
+        rel = src.relative_to(template_root)
+        if rel.name == selected_manifest:
+            rel = Path("manifest." + fmt)
+        elif rel.name.startswith("manifest.") and rel.suffix == ".j2":
+            continue  # the unselected manifest variant is not emitted
+        rel_text = render(str(rel), values)
+        target = project_dir / rel_text
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render(src.read_text(encoding="utf-8"), values), encoding="utf-8")
+        written.append(str(target.relative_to(project_dir)))
+
+    return project_dir, written
