@@ -1,0 +1,28 @@
+# Scheduled quality check for dependency and runner drift.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Nightly CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: OseMine/workflows/.github/actions/ci@v2
+        with:
+          language: python

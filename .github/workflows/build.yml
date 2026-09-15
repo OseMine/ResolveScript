@@ -1,0 +1,44 @@
+# On-demand distributable build. Release publishing remains in release.yml.
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "Build target"
+        required: false
+        default: python
+        type: choice
+        options:
+          - python
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: OseMine/workflows/.github/actions/build@v2
+        with:
+          language: python
+          build: ${{ inputs.build || 'python' }}
+          output-dir: dist
+
+      - name: Upload distributables
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolvescript-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

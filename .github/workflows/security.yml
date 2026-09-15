@@ -6,34 +6,41 @@ name: Security
 on:
   push:
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1" # Monday 06:00 UTC
 
 permissions:
   contents: read
 
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   security:
     name: Security gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      - uses: OseMine/workflows/.github/actions/build@v2
+        with:
+          language: python
+          build: python
+          output-dir: dist
+
       - uses: OseMine/workflows/.github/actions/security@v2
         with:
           min-rating: "7"
-          provider: opencode          # opencode | google | openai | mistral | anthropic | x | deepseek | groq | puter | ollama
+          provider: opencode
           model: auto-free
           api-key: ${{ secrets.OPENCODE_API_KEY }}
           fallback-provider: opencode
           fallback-model: auto-free
           fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
-          # --- custom OpenAI-compatible API (optional, replaces provider/model above) ---
-          # provider: custom
-          # model: my-model            # model id your API accepts
-          # custom-api-base: https://api.example.com/v1
-          # custom-api-key: ${{ secrets.CUSTOM_API_KEY }}
-          virustotal-api-key: ${{ secrets.VIRUSTOTAL_API_KEY }} # optional (VIRUSTOTAL badge)
-          virustotal-files: "dist/*.exe *.exe" # space-separated globs
+          virustotal-api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          virustotal-files: "dist/*"
