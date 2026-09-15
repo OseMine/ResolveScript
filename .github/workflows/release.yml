@@ -1,18 +1,16 @@
 # Thin release workflow - copy into any project, set `language` + optional
 # `build` flags. Everything (meta/semver, builds, security gate, AI release
-# notes, release + SHA256SUMS) lives in the shared `release-all` action and
-# updates automatically at @v1 (or @main for rolling updates).
+# notes, release + SHA256SUMS) lives in the shared `release-all` action.
+#
+# -- Pin vs rolling tag policy --------------------------------------
+#   @v2      stable - receives non-breaking fixes; recommended for production
+#   @latest  rolling - latest published state; friendly to new features
+#   @main    branch head - bleeding edge; only for testing
 #
 # Primary trigger: workflow_dispatch (Actions tab -> Run workflow).
 # Version is auto-detected from pubspec.yaml / Cargo.toml / package.json, or
 # overridden via the `version` input. Tag push (`v*`) remains supported as a
 # secondary trigger.
-#
-# AI notes + security gate: opencode / auto-free by default; set the
-# `OPENCODE_API_KEY` secret for real AI notes (otherwise git-log fallback).
-#
-# PyPI publishes using trusted/OIDC publishing via the shared pypi-publish
-# action (id-token: write required above).
 name: Release
 
 on:
@@ -48,7 +46,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: OseMine/workflows/.github/actions/release-all@v1
+      - uses: OseMine/workflows/.github/actions/release-all@v2
         with:
           language: python            # auto | rust | tauri | node | python | flutter | kmp | c | cpp | csharp | maven | gradle
           build: ${{ github.event.inputs.build || 'python' }}
@@ -56,13 +54,25 @@ jobs:
           min-rating: "7"             # security gate 0-10; 0 disables
           draft: ${{ github.event.inputs.draft || 'false' }}
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
-          provider: mistral          # opencode | google | openai | mistral | anthropic | x | deepseek | groq | puter | ollama
-          model: codestral
-          api-key: ${{ secrets.MISTRAL_API_KEY }}
+
+          # -- AI provider for the SECURITY GATE --------------------
+          provider: opencode          # opencode | google | openai | mistral | anthropic | x | deepseek | groq | puter | ollama
+          model: auto-free
+          api-key: ${{ secrets.OPENCODE_API_KEY }}
           fallback-provider: opencode
           fallback-model: auto-free
           fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
 
+          # -- AI provider for RELEASE NOTES (overrides above) -----
+          notes-mode: auto            # auto | file | ai-required
+          notes-file: CHANGELOG.md    # used only when AI fails (auto mode)
+          notes-provider: mistral
+          notes-model: codestral
+          notes-api-key: ${{ secrets.MISTRAL_API_KEY }}
+          notes-fallback-provider: opencode
+          notes-fallback-model: auto-free
+          notes-fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
+
       - name: Publish to PyPI (trusted publishing)
         if: true
-        uses: OseMine/workflows/.github/actions/pypi-publish@main
+        uses: OseMine/workflows/.github/actions/pypi-publish@v2

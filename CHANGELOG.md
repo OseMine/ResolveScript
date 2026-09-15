@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.2
+
+### Changed
+
+- Workflows pinned to `OseMine/workflows` `@v2` (stable): per-purpose AI
+  providers for the security gate vs release notes, AI notes sanitisation,
+  `notes-mode: auto` with `CHANGELOG.md` as AI-failure fallback.
+- Release notes now generated via `mistral`/`codestral`; the security gate
+  keeps its `opencode` provider + fallback.
+
 ## 0.1.1
 
 ### Added
