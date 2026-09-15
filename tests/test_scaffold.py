@@ -10,7 +10,13 @@ import pytest
 from resolve_script.cli import main
 from resolve_script.manifest.json_reader import load_manifest
 from resolve_script.manifest.validation import validate_manifest
-from resolve_script.scaffold import ScaffoldError, normalize_name, render, scaffold_project
+from resolve_script.scaffold import (
+    ScaffoldError,
+    _walk_templates,
+    normalize_name,
+    render,
+    scaffold_project,
+)
 
 
 def test_normalize_name() -> None:
@@ -83,3 +89,29 @@ def test_cli_create_end_to_end(tmp_path, capsys) -> None:
     assert "Next steps" in out
     assert (project / "manifest.json").is_file()
     assert (project / "cli_ext" / "__init__.py").is_file()
+
+
+def test_walk_templates_skips_pycache(tmp_path) -> None:
+    cache = tmp_path / "__pycache__"
+    cache.mkdir()
+    (cache / "menu.cpython-312.pyc").write_bytes(b"\xcb\r\r\n")
+    (tmp_path / "manifest.json.j2").write_text("{}", encoding="utf-8")
+    found = [p.name for p in _walk_templates(tmp_path)]
+    assert found == ["manifest.json.j2"]
+
+
+def test_scaffold_survives_pycache_in_templates(tmp_path, monkeypatch) -> None:
+    from resolve_script import scaffold as scaffold_mod
+
+    fake = tmp_path / "extension"
+    (fake / "@NAME@").mkdir(parents=True)
+    (fake / "manifest.json.j2").write_text('{"name": "@NAME@"}', encoding="utf-8")
+    (fake / "README.md").write_text("# @NAME@", encoding="utf-8")
+    (fake / "@NAME@" / "__init__.py").write_text("", encoding="utf-8")
+    (fake / "@NAME@" / "__pycache__").mkdir()
+    (fake / "@NAME@" / "__pycache__" / "x.cpython-312.pyc").write_bytes(b"\xcb\r\r\n")
+    monkeypatch.setattr(scaffold_mod, "TEMPLATES_DIR", tmp_path)
+    root, written = scaffold_project("py_cache_ok", destination=tmp_path)
+    assert (root / "py_cache_ok").is_dir()
+    assert (root / "py_cache_ok" / "__init__.py").is_file()
+    assert not any(".pyc" in str(p) for p in written)

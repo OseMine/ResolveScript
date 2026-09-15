@@ -1,0 +1,33 @@
+# Release pipeline for a Python CLI — thin wrapper over the shared
+# `release-all` action (language: python): version resolution from the tag,
+# sdist+wheel build, security gate, AI/git release notes, GitHub release with
+# SHA256SUMS. PyPI publishing is optional and only runs when the repo variable
+# `PYPI_ENABLED` is set to `true` (trusted/OIDC publishing on PyPI side).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Build + GitHub release
+        uses: OseMine/workflows/.github/actions/release-all@main
+        with:
+          language: python
+
+      - name: Publish to PyPI (trusted publishing)
+        if: vars.PYPI_ENABLED == 'true'
+        uses: OseMine/workflows/.github/actions/pypi-publish@main
+        with:
+          dist: dist

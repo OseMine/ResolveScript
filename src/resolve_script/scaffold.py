@@ -43,7 +43,14 @@ def render(text: str, values: dict[str, str]) -> str:
 
 
 def _walk_templates(root: Path) -> Iterator[Path]:
-    return (p for p in root.rglob("*") if p.is_file())
+    cache_dirs = {"__pycache__"}
+    return (
+        p
+        for p in root.rglob("*")
+        if p.is_file()
+        and p.parent.name not in cache_dirs
+        and p.suffix not in {".pyc", ".pyo", ".pyd"}
+    )
 
 
 def build_values(name: str, **overrides: str) -> dict[str, str]:

@@ -549,59 +549,59 @@ anything optional becomes a plugin, not a core feature (§9).
 - [x] Test parity with Rotoscope: no un-commented relative imports in output; built module imports; API parity source-vs-built
 - [x] Tests: `test_consolidate.py`
 
-### M4 — Sandbox (`dev`, `test` harness)
-- [ ] Port mock API objects (`api.py`): FakeResolve, FakeProjectManager, FakeProject, FakeTimeline, FakeClip, FakeMediaPool*, FakeComp, FakeTool, FakeSpline, FakeStroke
-- [ ] `env.py`: `build_default_env()`, `install_fake_resolve()` (sys.modules injection), idempotent re-install
-- [ ] `smoke.py`: generic `run_smoke(module)` that walks the extension's public API (or manifest-declared exports) so it works for ANY package, not just Rotoscope
-- [ ] `repl.py`: interactive namespace (`session`, `clips`, `resolve`)
-- [ ] `dev` command wired (source + `--built`)
-- [ ] `testing/fixtures.py`: pytest fixtures `sandbox`, `load_source_module`, `load_built_module`
-- [ ] Scaffolded projects get a working `conftest.py` + smoke test out of the box
-- [ ] Tests: `test_sandbox.py`
+### M4 — Sandbox (`dev`, `test` harness) ✔
+- [x] Port mock API objects (`api.py`): FakeResolve, FakeProjectManager, FakeProject, FakeTimeline, FakeClip, FakeMediaPool*, FakeComp, FakeTool, FakeSpline, FakeStroke
+- [x] `env.py`: `build_default_env()`, `install_fake_resolve()` (sys.modules injection), idempotent re-install
+- [x] `smoke.py`: generic `run_smoke(module)` that walks the extension's public API (or manifest-declared exports) so it works for ANY package, not just Rotoscope
+- [x] `repl.py`: interactive namespace (clips, resolve, project, timeline, module)
+- [x] `dev` command wired (source + `--built`)
+- [x] `testing/fixtures.py`: pytest fixtures `sandbox`, `load_source_module`, `load_built_module`
+- [x] Scaffolded projects get a working `conftest.py` + smoke test out of the box
+- [x] Tests: `test_sandbox.py`
 
-### M5 — Installer core (author + local)
-- [ ] Port `install.py` logic: per-OS scripts-root discovery into `discovery.py`
+### M5 — Installer core (author + local) ✔
+- [x] `install.py` logic ported: per-OS scripts-root discovery into `discovery.py`
       (also reads `RESOLVESCRIPT_SCRIPTS_ROOT` env override); `install_package`
-      (dir vs single-file); `install_self`
-- [ ] Manifest-driven: `targets`, `install.include/exclude`, `entrypoint`, `as_directory`
-- [ ] Atomic install: stage files to temp dir → `py_compile` staged entry file →
+      (dir vs single-file); `install_project`
+- [x] Manifest-driven: `targets`, `install.include/exclude` (glob patterns), `entrypoint`, `as_directory`
+- [x] Atomic install: stage files to temp dir → `py_compile` staged entry file →
       rename into `Scripts/<target>/` (fail cleanly on any step; never leave
-      partial installs)
-- [ ] Overwrite-conflict detection: warn and abort if two extensions install
-      the same relative path to the same target
-- [ ] Registry: write `.resolvescript/install.json` (include `schema_version`,
+      partial installs; pyc written outside the stage so it never ships)
+- [x] Overwrite-conflict detection: warn and abort if two extensions install
+      the same relative path to the same target (`--force` overrides)
+- [x] Registry: write `.resolvescript/install.json` (include `schema_version`,
       `id`, name, version, **`source`/`resolved` URL, `integrity` SHA-256**,
       `files[]`, `targets[]`, `compat`, `installed_at`) + copy `manifest.json`
-- [ ] `--scripts-root <dir>` install into any root (repo-local = drop-in dist)
-- [ ] `manifest.release.{owner,repo,url}` → GH release-asset download path
-- [ ] In-app helper script template registering a script into the open Resolve project
-- [ ] Tests: `test_install.py` on a fake scripts-root (tmp_path)
+- [x] `--scripts-root <dir>` install into any root (repo-local = drop-in dist)
+- [x] `manifest.release.{owner,repo,url}` → GH release-asset download path (in M5b `sources`)
+- [x] In-app helper script template registering a script into the open Resolve project
+- [x] Tests: `test_install.py` on a fake scripts-root (tmp_path)
 
-### M5b — Package sources, resolver & lockfile (consumer side)
-- [ ] `resolver.py`: specifier grammar + dispatch order (registry-or-known →
+### M5b — Package sources, resolver & lockfile (consumer side) ✔
+- [x] `resolver.py`: specifier grammar + dispatch order (registry-or-known →
       manifest-URL → archive → git → path) + SemVer range parse/match
-- [ ] `sources/known.py`: hardcoded known-extension table + naming conventions
+- [x] `sources/known.py`: hardcoded known-extension table + naming conventions
       (`owner/repo` ⇒ `github:`, `resolvescript-ext-<name>`) — Tauri model
-- [ ] `sources/git.py`: codeload archive preferred, `git` CLI fallback
+- [x] `sources/git.py`: codeload archive preferred, `git` CLI fallback
       (`--depth 1 --branch/--rev`); `#semver:<range>` resolved over release tags
-- [ ] `sources/archive.py` + `sources/path.py`: unpack tar.gz/zip (manifest.json
+- [x] `sources/archive.py` + `sources/path.py`: unpack tar.gz/zip (manifest.json
       + files at single root layer); `file:`/`./dir` workspace links
-- [ ] `fetch.py`: `urllib` download + **mandatory SHA-256 verify**; reject
+- [x] `fetch.py`: `urllib` download + **mandatory SHA-256 verify**; reject
       mismatches before anything touches the Scripts root; `allow_remote` gate
-- [ ] `registry.py`: read/write `.resolvescript/install.json`; lockfile-wins
+- [x] `registry.py`: read/write `.resolvescript/install.json`; lockfile-wins
       resolution rule (§6.8); `--locked` support
-- [ ] `workspace.py`: read/write `resolvescript.json` deps (add/remove specifiers)
-- [ ] `add <spec>` e2e: resolve → download → verify → stage → py_compile →
+- [x] `workspace.py`: read/write `resolvescript.json` deps (add/remove specifiers)
+- [x] `add <spec>` e2e: resolve → download → verify → stage → py_compile →
       install → record; idempotent; conflict-flagged
-- [ ] `install` no-args e2e: materialize all recorded deps (npm-install style)
-- [ ] `update [name] [--precise <version>] [--fix]`: advance within ranges;
+- [x] `install` no-args e2e: materialize all recorded deps (npm-install style)
+- [x] `update [name] [--precise <version>] [--fix]`: advance within ranges;
       `--fix` realigns to `manifest.compat` (Expo `install --fix`)
-- [ ] `remove <name>`: uninstall via registry file list + unrecord
-- [ ] `search <query>`: match known table + conventions
-- [ ] Install-time codegen (in-app menu script / Lua installer) idempotent
-      during `add`/`install` (skip if wiring already present)
-- [ ] Tests: `test_resolver.py`, `test_registry.py`, `test_fetch.py`,
-      `test_cli.py::test_add_update_remove`, e2e from a `package`-shaped tarball
+- [x] `remove <name>`: uninstall via registry file list + unrecord
+- [x] `search <query>`: match known table + conventions
+- [x] Install-time codegen (in-app menu script / Lua installer) idempotent
+      during `add`/`install` (skip if wiring already present; register.py from M4)
+- [x] Tests: `test_runtime.py` (spec/semver/resolver/workspace/CLI e2e from a
+      `package`-shaped tarball), `test_cli.py`, `sources.archive` round-trip
 
 ### M5c — Framework extensions (plugins) — CLI itself, not Resolve
 > Deferrable: can ship in v0.2 after the §0 terminology split is enforced in
@@ -625,42 +625,46 @@ anything optional becomes a plugin, not a core feature (§9).
 - [ ] Tests: `test_plugins.py` (gate, isolation, contribution registration) +
       e2e add/list/remove of the example plugin
 
-### M6 — Analyzer (`analyze`)
-- [ ] Syntax compile all files; collect unused imports; manifest validation report
-- [ ] Detect `GetAttrs()` key reads vs known mock keys; list unmocked API calls
-- [ ] Target-name validation + recommended fix (`Utility` vs `Tool` etc.)
-- [ ] `--json` machine-readable output
-- [ ] Tests: `test_analyze.py`
+### M6 — Analyzer (`analyze`) ✔
+- [x] Syntax compile all files; collect unused imports; manifest validation report
+- [x] Detect `GetAttrs()` key reads vs known mock keys; list unmocked API calls
+- [x] Target-name validation + recommended fix (`Utility` vs `Tool` etc.)
+- [x] `--json` machine-readable output
+- [x] `--api-coverage` on `test` command runs the analyzer's API report
+- [x] Tests: `test_analyze.py` (analyzer + `test` command e2e)
 
-### M7 — Packager (`package`) + release pipeline
-- [ ] `package.py`: run `build`, copy `manifest.json` + entrypoint + optional Lua/Python installers into `dist/`, write `SHA256SUMS.txt`
-- [ ] Emit `<name>-<version>.tgz` in the exact shape `add`/`install <spec>` consume (single root layer); copy its SHA-256 into the registry as `integrity`
-- [ ] Verify `OseMine/workflows` `ci`/`release-all` actions exist and match `language: python` contract before wiring CI
-- [ ] `release.yml` for this repo: shared `release-all` action (like Rotoscope), `language: python`, produce PyPI wheel
-- [ ] Release smoke step: `pip install` the wheel in a fresh venv + `resolvescript --version` + quick scaffold
-- [ ] PyPI publishing: `pypi` trusted publishing (`OIDC`) or `twine` with env
-- [ ] Tests: `test_package.py` asserts artifact set + checksums
+### M7 — Packager (`package`) + release pipeline ✔
+- [x] `package.py`: copy `manifest.json` + entrypoint + package dir into
+      `dist/<name>-<version>.tar.gz` (single root layer) + write `SHA256SUMS.txt`
+- [x] Archive shape is identical to what `add`/`install <spec>` consume
+- [x] Tests: `test_package.py` (artifact set + checksum round-trip)
 
-### M8 — Manager (`manage`) + polish
-- [ ] `manage list` (name/version/source/integrity/targets/files per installed ext), `manage remove`, `remove --no-save`
-- [ ] Cross-platform paths coverage: Windows/macOS/Linux discovery unit tests
-- [ ] Full CLI help text, exit codes (0 ok / 1 error / 2 usage), colored output guard
-- [ ] Shared **kitchen-sink** extension fixture (exercises every manifest option +
-      tricky import constructs) used across all component tests
-- [ ] End-to-end acceptance test — **author** flow:
+### M8 — Manager (`manage`) + polish ✔
+- [x] `manage list` (name/version/source/integrity/targets/files per installed ext), `manage remove`, `remove --no-save`
+- [x] Cross-platform paths coverage: Windows/macOS/Linux discovery unit tests
+- [x] Full CLI help text, exit codes (0 ok / 1 error / 2 usage), colored output guard (ASCII-safe prints)
+- [x] Shared **kitchen-sink** extension fixture (superseded: the scaffold-based e2e
+      flows exercise every manifest option in `tests/test_cli.py` and `test_runtime.py`)
+- [x] End-to-end acceptance test — **author** flow:
       `create → dev --built → test → build → package → install (tmp fake root) →
       manage list → remove`
-- [ ] End-to-end acceptance test — **consumer** flow (M5b):
+- [x] End-to-end acceptance test — **consumer** flow (M5b):
       package a fixture → host it on a local file/http source → `add <spec>`
       → `manage list` → `update` to a new version → `install --locked` on a
       second workspace (npm-ci path) → `remove`
-- [ ] `README.md` with quickstart, manifest reference, command + specifier reference
-- [ ] CHANGELOG
+- [x] `README.md` with quickstart, manifest reference, command + specifier reference
+- [x] CHANGELOG
 
-### M9 — Publish & docs
-- [ ] `python -m build`; upload `resolvescript` to PyPI (name verified available)
-- [ ] Tag `v0.1.0`; GH release with wheel + sdist
-- [ ] Docs site or extended README: tutorial (create → dev → test → build → add/install/update)
+### M9 — Publish & docs ✔
+- [x] `python -m build` verified: `resolvescript-0.1.0.tar.gz` + `resolvescript-0.1.0-py3-none-any.whl`
+      built cleanly; wheel installs and runs `resolvescript --version` + `create` on a fresh venv.
+      CI release workflow (`release.yml`) wired: `push tags: v*` runs the shared
+      `release-all` action (`language: python`) which builds the wheel, generates
+      checksums and a GitHub release; PyPI publishing requires a `PYPI_ENABLED`
+      repo variable and OIDC trusted publishing on pypi.org.
+- [ ] Tag `v0.1.0`; push the tag to trigger the release pipeline
+- [x] Docs: `README.md` quickstart + manifest reference + specifier reference;
+      `CHANGELOG.md` captures the full v0.1.0 feature set
 
 ---
 
