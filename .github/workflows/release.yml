@@ -70,7 +70,7 @@ jobs:
           notes-model: auto-free
           notes-api-key: ${{ secrets.OPENCODE_API_KEY }}
           notes-fallback-provider: mistral
-          notes-fallback-model: codestral
+          notes-fallback-model: auto-free
           notes-fallback-api-key: ${{ secrets.MISTRAL_API_KEY }}
 
       - name: Publish to PyPI (trusted publishing)
