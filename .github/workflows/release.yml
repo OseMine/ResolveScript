@@ -25,6 +25,7 @@ jobs:
         uses: OseMine/workflows/.github/actions/release-all@main
         with:
           language: python
+          build: python
 
       - name: Publish to PyPI (trusted publishing)
         if: vars.PYPI_ENABLED == 'true'
