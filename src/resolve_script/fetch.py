@@ -50,9 +50,12 @@ def fetch(
 ) -> Fetched:
     """Download ``url`` to a fresh ``dest``; verify integrity when provided.
 
-    Raises :class:`FetchError` on HTTP errors, or if the downloaded bytes do
-    not match ``expected_sha256`` (the file is then removed).
+    Only ``http://`` and ``https://`` schemes are allowed; other schemes
+    (e.g. ``file://``, ``ftp://``) raise :class:`FetchError` to prevent
+    local‑file reads and SSRF.
     """
+    if not url.lower().startswith(("http://", "https://")):
+        raise FetchError(f"only http/https URLs are allowed (got {url!r})")
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()

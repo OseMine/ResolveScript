@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import tarfile
 import zipfile
+import os
+import sys
 from pathlib import Path
 
 
@@ -27,6 +29,19 @@ def _safe_members(names: list[str]) -> None:
     for name in names:
         if name.startswith(("/", "\\")) or ".." in Path(name).parts:
             raise ArchiveError(f"archive contains unsafe path: {name!r}")
+
+
+def _validate_extracted_paths(dest_dir: Path, names: list[str]) -> None:
+    """Ensure every extracted member resolves inside ``dest_dir`` after
+    ``extractall`` – protects against zip‑slip via resolved symlinks or
+    case‑insensitive ``..`` that survived the name check."""
+    resolved = dest_dir.resolve()
+    for name in names:
+        target = (resolved / Path(name)).resolve()
+        if not str(target).startswith(str(resolved) + os.sep) and target != resolved:
+            raise ArchiveError(
+                f"archive member escapes destination: {name!r} -> {target}"
+            )
 
 
 def _find_root(candidates: list[str]) -> str:
@@ -54,11 +69,15 @@ def unpack_archive(archive: Path, dest_dir: Path) -> Path:
                 names = zf.namelist()
                 _safe_members(names)
                 zf.extractall(dest_dir)
+                _validate_extracted_paths(dest_dir, names)
         else:
             with tarfile.open(archive, "r:*") as tf:
                 names = tf.getnames()
                 _safe_members(names)
-                tf.extractall(dest_dir, filter="data")
+                if sys.version_info >= (3, 12):
+                    tf.extractall(dest_dir, filter="data")
+                else:
+                    tf.extractall(dest_dir)
     except (tarfile.TarError, zipfile.BadZipFile, OSError) as exc:
         raise ArchiveError(f"failed to unpack {archive}: {exc}") from exc
 

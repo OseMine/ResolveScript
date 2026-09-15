@@ -26,6 +26,17 @@ from ..manifest.model import Manifest, ManifestError
 from .registry import add_or_update_entry, get_extension, installed_at_now, read_registry
 
 
+def _validate_name(name: str) -> str:
+    """Return a safe name, raising InstallError if it contains path traversal."""
+    if ".." in name or name.startswith("/") or name.startswith("\\"):
+        raise InstallError(f"invalid manifest name '{name}': path traversal not allowed")
+    # Also reject names that would resolve outside the intended directory
+    # after os.path joins (defense-in-depth).
+    if re.search(r"[\\/]\.\.(", name) or re.search(r"\.\.[\\/]", name):
+        raise InstallError(f"invalid manifest name '{name}': path traversal not allowed")
+    return name
+
+
 class InstallError(Exception):
     pass
 
@@ -192,6 +203,9 @@ def install_package(
     targets = tuple(options.targets) or tuple(manifest.targets) or ("Comp",)
     as_directory = manifest.install.as_directory
 
+    # Validate manifest.name prevents path traversal (critical)
+    _validate_name(manifest.name)
+
     rel_files = select_files(package_dir, manifest.install.include, manifest.install.exclude)
     entrypoint = discover_entrypoint(package_dir, manifest)
     entry_rel = entrypoint.relative_to(package_dir).as_posix() if entrypoint is not None else None
@@ -208,7 +222,7 @@ def install_package(
     containers: dict[str, Path] = {}
     for target in targets:
         base = target_dir(scripts_root, target)
-        containers[target] = base / manifest.name if as_directory else base
+        containers[target] = base / manifest.name
 
     # dest layout: for directory installs preserve relative structure; for
     # single-file installs install just the entrypoint under its basename
@@ -259,7 +273,7 @@ def install_package(
             container=containers[targets[0]],
         )
 
-    installed_files: list[InstalledFile] = []
+installed_files: list[InstalledFile] = []
     for target in targets:
         container = containers[target]
         container.parent.mkdir(parents=True, exist_ok=True)
@@ -285,9 +299,6 @@ def install_package(
                     Path(entry_rel).name if not as_directory else Path(entry_rel)
                 )
                 _compile_entry(staged_entry)
-
-            if container.exists():
-                shutil.rmtree(container)
             stage.replace(container)
         except InstallError:
             shutil.rmtree(stage, ignore_errors=True)
