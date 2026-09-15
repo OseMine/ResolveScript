@@ -1,21 +1,43 @@
-# Release pipeline for a Python CLI — thin wrapper over the shared
-# `release-all` action (language: python): version resolution from the tag,
-# sdist+wheel build, security gate, AI/git release notes, GitHub release with
-# SHA256SUMS. PyPI publishing is optional and only runs when the repo variable
-# `PYPI_ENABLED` is set to `true` (trusted/OIDC publishing on PyPI side).
+# Thin release workflow for a Python CLI — copy of the canonical thin template.
+# All meta/semver, builds, security gate, release notes, and the GitHub release
+# live inside the shared `release-all` action. PyPI publishing is optional and
+# only runs when the repo variable `PYPI_ENABLED` is set to `true`
+# (trusted/OIDC publishing on the PyPI side).
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.3). Empty = auto-detect from project files"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as prerelease"
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: "Create as draft"
+        required: false
+        type: boolean
+        default: false
+      build:
+        description: "Build type (all, python, ...)"
+        required: false
+        type: string
+        default: python
   push:
     tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -25,7 +47,11 @@ jobs:
         uses: OseMine/workflows/.github/actions/release-all@main
         with:
           language: python
-          build: python
+          build: ${{ github.event.inputs.build || 'python' }}
+          release-tag: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
+          min-rating: "7"
+          draft: ${{ github.event.inputs.draft || 'false' }}
+          prerelease: ${{ github.event.inputs.prerelease || 'false' }}
 
       - name: Publish to PyPI (trusted publishing)
         if: vars.PYPI_ENABLED == 'true'
