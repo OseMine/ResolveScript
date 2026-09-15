@@ -66,12 +66,12 @@ jobs:
           # -- AI provider for RELEASE NOTES (overrides above) -----
           notes-mode: auto            # auto | file | ai-required
           notes-file: CHANGELOG.md    # used only when AI fails (auto mode)
-          notes-provider: mistral
-          notes-model: codestral
-          notes-api-key: ${{ secrets.MISTRAL_API_KEY }}
-          notes-fallback-provider: opencode
-          notes-fallback-model: auto-free
-          notes-fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          notes-provider: opencode
+          notes-model: auto-free
+          notes-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          notes-fallback-provider: mistral
+          notes-fallback-model: codestral
+          notes-fallback-api-key: ${{ secrets.MISTRAL_API_KEY }}
 
       - name: Publish to PyPI (trusted publishing)
         if: true
