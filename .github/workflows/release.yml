@@ -29,5 +29,3 @@ jobs:
       - name: Publish to PyPI (trusted publishing)
         if: vars.PYPI_ENABLED == 'true'
         uses: OseMine/workflows/.github/actions/pypi-publish@main
-        with:
-          dist: dist
