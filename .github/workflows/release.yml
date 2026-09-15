@@ -1,8 +1,19 @@
-# Thin release workflow for a Python CLI — copy of the canonical thin template.
-# All meta/semver, builds, security gate, release notes, and the GitHub release
-# live inside the shared `release-all` action. PyPI publishing is optional and
-# only runs when the repo variable `PYPI_ENABLED` is set to `true`
-# (trusted/OIDC publishing on the PyPI side).
+# Thin release workflow - copy into any project, set `language` + optional
+# `build` flags. Everything (meta/semver, builds, security gate, AI release
+# notes, release + SHA256SUMS) lives in the shared `release-all` action and
+# updates automatically at @v1 (or @main for rolling updates).
+#
+# Primary trigger: workflow_dispatch (Actions tab -> Run workflow).
+# Version is auto-detected from pubspec.yaml / Cargo.toml / package.json, or
+# overridden via the `version` input. Tag push (`v*`) remains supported as a
+# secondary trigger.
+#
+# AI notes + security gate: configured via repo variables `AI_PROVIDER`,
+# `AI_MODEL`, `AI_FALLBACK_PROVIDER`, `AI_FALLBACK_MODEL` and the secret
+# `AI_API_KEY`. Falls back to opencode / auto-free / git-log notes.
+#
+# PyPI publishing is optional and only runs when the repo variable
+# `PYPI_ENABLED` is set to `true` (trusted/OIDC publishing on the PyPI side).
 name: Release
 
 on:
@@ -23,7 +34,7 @@ on:
         type: boolean
         default: false
       build:
-        description: "Build type (all, python, ...)"
+        description: "Comma-separated build flags: cargo, tauri, plugin, installer, python, android, ios, flutter, c, cpp, csharp, java, all"
         required: false
         type: string
         default: python
@@ -43,15 +54,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build + GitHub release
-        uses: OseMine/workflows/.github/actions/release-all@main
+      - uses: OseMine/workflows/.github/actions/release-all@v1
         with:
-          language: python
+          language: python            # auto | rust | tauri | node | python | flutter | kmp | c | cpp | csharp | maven | gradle
           build: ${{ github.event.inputs.build || 'python' }}
           release-tag: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
-          min-rating: "7"
+          min-rating: "7"             # security gate 0-10; 0 disables
           draft: ${{ github.event.inputs.draft || 'false' }}
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
+          provider: ${{ vars.AI_PROVIDER || 'opencode' }}
+            # opencode | google | openai | mistral | anthropic | x | deepseek | groq | puter | ollama
+          model: ${{ vars.AI_MODEL || 'auto-free' }}
+          api-key: ${{ secrets.AI_API_KEY || secrets.OPENCODE_API_KEY }}
+          fallback-provider: ${{ vars.AI_FALLBACK_PROVIDER || 'opencode' }}
+          fallback-model: ${{ vars.AI_FALLBACK_MODEL || 'auto-free' }}
+          fallback-api-key: ${{ secrets.AI_API_KEY || secrets.OPENCODE_API_KEY }}
+          # --- custom OpenAI-compatible API (optional, replaces provider/model above) ---
+          # provider: custom
+          # model: my-model            # model id your API accepts
+          # custom-api-base: https://api.example.com/v1
+          # custom-api-key: ${{ secrets.CUSTOM_API_KEY }}
 
       - name: Publish to PyPI (trusted publishing)
         if: vars.PYPI_ENABLED == 'true'
