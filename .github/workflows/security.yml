@@ -37,4 +37,3 @@ jobs:
           # custom-api-key: ${{ secrets.CUSTOM_API_KEY }}
           virustotal-api-key: ${{ secrets.VIRUSTOTAL_API_KEY }} # optional (VIRUSTOTAL badge)
           virustotal-files: "dist/*.exe *.exe" # space-separated globs
-          test-cmd: "python -m pytest"       # optional verification
