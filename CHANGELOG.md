@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.1
+
+### Added
+
+- Repo hygiene: issue templates (bug report, feature request, config),
+  `FUNDING.yml`, and `dependabot.yml` (weekly `pip` + `github-actions`).
+- `security.yml` - thin security gate (Trivy/pip audit + VirusTotal + optional
+  AI review) on push, PR, and weekly schedule.
+
+### Changed
+
+- Release pipeline now publishes to PyPI via trusted publishing (OIDC) with
+  the shared `pypi-publish` action; AI security gate + release notes wired
+  through `release-all` (`provider: opencode`, `auto-free` model).
+
 ## 0.1.0 - unreleased
 
 ### Added

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: TODO.md
+    url: https://github.com/OseMine/ResolveScript/blob/master/TODO.md
+    about: Planned milestones and the roadmap for resolvescript.

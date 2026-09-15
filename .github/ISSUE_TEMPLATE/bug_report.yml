@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a bug in resolvescript
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report. Please search existing issues first.
+  - type: input
+    id: version
+    attributes:
+      label: resolvescript version
+      description: Output of `resolvescript --version`
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+      placeholder: e.g. 3.12.10
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: Operating system you ran resolvescript on
+      placeholder: e.g. Windows 11 / macOS 14
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen and what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Paste the exact commands you ran and, if relevant, the `manifest.json` / script contents.
+      render: console
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste any error traceback or CLI output. If you ran with `--verbose`, include that.
+      render: console
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the tool is affected?
+      multiple: true
+      options:
+        - create / scaffold
+        - dev / test / sandbox
+        - build / consolidate
+        - add / install / update (sources/resolver)
+        - analyze
+        - package
+        - manage list / remove
+        - CLI / docs
+    validations:
+      required: false

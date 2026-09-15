@@ -23,4 +23,4 @@ jobs:
 
       - uses: OseMine/workflows/.github/actions/ci@main
         with:
-          language: ${{ vars.CI_LANGUAGE || 'python' }}
+          language: python
