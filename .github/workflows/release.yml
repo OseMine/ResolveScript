@@ -20,6 +20,11 @@ on:
         description: "Version to release (e.g. 1.2.3). Empty = auto-detect from project files"
         required: false
         type: string
+      version-file:
+        description: "File to detect version from (e.g. pyproject.toml). Empty = auto-detect from project files"
+        default: "pyproject.toml"
+        required: false
+        type: string
       prerelease:
         description: "Mark as prerelease"
         required: false
@@ -41,6 +46,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    env:
+      VERSION_FILE: ${{ github.event.inputs.version-file || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
