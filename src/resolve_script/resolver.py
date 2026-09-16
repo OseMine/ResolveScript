@@ -127,6 +127,10 @@ def resolve_spec(
 
     if spec.kind in ("archive", "manifest"):
         url = _asset_url(spec)
+        if not url.lower().startswith("https://"):
+            raise ResolveError(
+                f"refusing to download executable package over plaintext http: {url}"
+            )
         archive = work_dir / "cache" / _slug(url)
         if not archive.is_file():
             fetch(url=url, dest=archive)
@@ -163,6 +167,10 @@ def _asset_url(spec: Spec) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         payload = Path(tmp) / "manifest.json"
         try:
+            if not spec.url.lower().startswith("https://"):
+                raise ResolveError(
+                    f"refusing to fetch package manifest over plaintext http: {spec.url}"
+                )
             fetch(url=spec.url, dest=payload)
         except Exception as exc:
             raise ResolveError(f"failed to fetch manifest {spec.url}: {exc}") from exc

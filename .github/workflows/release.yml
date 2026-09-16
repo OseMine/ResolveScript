@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
@@ -96,7 +96,7 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "Resolved release tag: v$version"
 
-      - uses: OseMine/workflows/.github/actions/release-all@v2
+      - uses: OseMine/workflows/.github/actions/release-all@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28
         with:
           language: python            # auto | rust | tauri | node | python | flutter | kmp | c | cpp | csharp | maven | gradle
           build: python
@@ -125,4 +125,4 @@ jobs:
 
       - name: Publish to PyPI (trusted publishing)
         if: false
-        uses: OseMine/workflows/.github/actions/pypi-publish@v2
+        uses: OseMine/workflows/.github/actions/pypi-publish@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28

@@ -8,10 +8,24 @@ import tempfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 class FetchError(RuntimeError):
     pass
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects that switch to a non-http(s) scheme (SSRF guard)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913
+        scheme = urlparse(newurl).scheme.lower()
+        if scheme not in ("http", "https"):
+            raise FetchError(f"redirect to non-http(s) scheme blocked: {newurl!r}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_SafeRedirectHandler())
 
 
 @dataclass
@@ -65,7 +79,7 @@ def fetch(
     socket.setdefaulttimeout(timeout)
     try:
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
+            with _OPENER.open(url, timeout=timeout) as response:
                 data = response.read()
         except Exception as exc:  # URLError, HTTPError, timeout…
             raise FetchError(f"failed to download {url}: {exc}") from exc
