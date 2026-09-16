@@ -63,6 +63,34 @@ def _validate_tar_links(members: list[tarfile.TarInfo], dest_dir: Path) -> None:
             )
 
 
+def _validate_zip_members(zf: zipfile.ZipFile, dest_dir: Path) -> None:
+    """Reject absolute / escaping paths and symlink targets (zip-slip).
+
+    Must run BEFORE ``extractall`` so hostile links can never be written.
+    """
+    resolved = dest_dir.resolve()
+    for info in zf.infolist():
+        name = info.filename
+        if not _is_within(resolved, resolved / Path(name)):
+            raise ArchiveError(f"zip member escapes destination: {name!r}")
+    for info in zf.infolist():
+        mode = (info.external_attr >> 16) & 0xFFFF
+        if (mode & 0xF000) != 0xA000:  # not a symlink entry
+            continue
+        link_target = zf.read(info).decode("utf-8", errors="replace")
+        if os.path.isabs(link_target):
+            raise ArchiveError(
+                f"zip symlink has absolute target: "
+                f"{info.filename!r} -> {link_target!r}"
+            )
+        target_path = (resolved / Path(info.filename)).parent / link_target
+        if not _is_within(resolved, target_path):
+            raise ArchiveError(
+                f"zip symlink escapes destination: "
+                f"{info.filename!r} -> {link_target!r}"
+            )
+
+
 def _validate_extracted_paths(dest_dir: Path, names: list[str]) -> None:
     """Ensure every extracted member resolves inside ``dest_dir`` after
     ``extractall`` – protects against zip‑slip via resolved symlinks or
@@ -100,6 +128,7 @@ def unpack_archive(archive: Path, dest_dir: Path) -> Path:
             with zipfile.ZipFile(archive) as zf:
                 names = zf.namelist()
                 _safe_members(names)
+                _validate_zip_members(zf, dest_dir)
                 zf.extractall(dest_dir)
                 _validate_extracted_paths(dest_dir, names)
         else:
