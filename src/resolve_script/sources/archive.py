@@ -31,6 +31,38 @@ def _safe_members(names: list[str]) -> None:
             raise ArchiveError(f"archive contains unsafe path: {name!r}")
 
 
+def _is_within(base: Path, target: Path) -> bool:
+    try:
+        target.resolve().relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _validate_tar_links(members: list[tarfile.TarInfo], dest_dir: Path) -> None:
+    """Reject absolute / escaping symlink and hard link targets (tar-slip).
+
+    Must run BEFORE ``extractall`` so hostile links can never be written.
+    """
+    resolved = dest_dir.resolve()
+    for member in members:
+        if not (member.issym() or member.islnk()):
+            continue
+        target = member.linkname
+        if os.path.isabs(target):
+            raise ArchiveError(
+                f"tar link has absolute target: {member.name!r} -> {target!r}"
+            )
+        if member.issym():
+            link_target = (resolved / member.name).parent / target
+        else:
+            link_target = resolved / target
+        if not _is_within(resolved, link_target):
+            raise ArchiveError(
+                f"tar link escapes destination: {member.name!r} -> {target!r}"
+            )
+
+
 def _validate_extracted_paths(dest_dir: Path, names: list[str]) -> None:
     """Ensure every extracted member resolves inside ``dest_dir`` after
     ``extractall`` – protects against zip‑slip via resolved symlinks or
@@ -38,7 +70,7 @@ def _validate_extracted_paths(dest_dir: Path, names: list[str]) -> None:
     resolved = dest_dir.resolve()
     for name in names:
         target = (resolved / Path(name)).resolve()
-        if not str(target).startswith(str(resolved) + os.sep) and target != resolved:
+        if not _is_within(resolved, target):
             raise ArchiveError(
                 f"archive member escapes destination: {name!r} -> {target}"
             )
@@ -73,12 +105,14 @@ def unpack_archive(archive: Path, dest_dir: Path) -> Path:
         else:
             with tarfile.open(archive, "r:*") as tf:
                 names = tf.getnames()
+                members = tf.getmembers()
                 _safe_members(names)
+                _validate_tar_links(members, dest_dir)
                 if sys.version_info >= (3, 12):
                     tf.extractall(dest_dir, filter="data")
                 else:
                     tf.extractall(dest_dir)
-                    _validate_extracted_paths(dest_dir, names)
+                _validate_extracted_paths(dest_dir, names)
     except (tarfile.TarError, zipfile.BadZipFile, OSError) as exc:
         raise ArchiveError(f"failed to unpack {archive}: {exc}") from exc
 
