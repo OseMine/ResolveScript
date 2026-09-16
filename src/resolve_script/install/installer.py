@@ -220,7 +220,7 @@ def install_package(
     containers: dict[str, Path] = {}
     for target in targets:
         base = target_dir(scripts_root, target)
-        containers[target] = base / manifest.name
+        containers[target] = base / manifest.name if as_directory else base
 
     # dest layout: for directory installs preserve relative structure; for
     # single-file installs install just the entrypoint under its basename
@@ -271,7 +271,7 @@ def install_package(
             container=containers[targets[0]],
         )
 
-installed_files: list[InstalledFile] = []
+    installed_files: list[InstalledFile] = []
     for target in targets:
         container = containers[target]
         container.parent.mkdir(parents=True, exist_ok=True)
@@ -297,7 +297,17 @@ installed_files: list[InstalledFile] = []
                     Path(entry_rel).name if not as_directory else Path(entry_rel)
                 )
                 _compile_entry(staged_entry)
-            stage.replace(container)
+            if as_directory:
+                if container.exists():
+                    shutil.rmtree(container)
+                stage.replace(container)
+            else:
+                for staged_file in stage.rglob("*"):
+                    if staged_file.is_file():
+                        dest_file = container / staged_file.relative_to(stage)
+                        dest_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(staged_file, dest_file)
+                shutil.rmtree(stage, ignore_errors=True)
         except InstallError:
             shutil.rmtree(stage, ignore_errors=True)
             raise
