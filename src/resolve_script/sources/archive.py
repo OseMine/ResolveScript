@@ -78,6 +78,7 @@ def unpack_archive(archive: Path, dest_dir: Path) -> Path:
                     tf.extractall(dest_dir, filter="data")
                 else:
                     tf.extractall(dest_dir)
+                    _validate_extracted_paths(dest_dir, names)
     except (tarfile.TarError, zipfile.BadZipFile, OSError) as exc:
         raise ArchiveError(f"failed to unpack {archive}: {exc}") from exc
 

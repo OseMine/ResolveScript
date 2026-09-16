@@ -28,12 +28,10 @@ from .registry import add_or_update_entry, get_extension, installed_at_now, read
 
 def _validate_name(name: str) -> str:
     """Return a safe name, raising InstallError if it contains path traversal."""
-    if ".." in name or name.startswith("/") or name.startswith("\\"):
+    if ".." in name:
         raise InstallError(f"invalid manifest name '{name}': path traversal not allowed")
-    # Also reject names that would resolve outside the intended directory
-    # after os.path joins (defense-in-depth).
-    if re.search(r"[\\/]\.\.(", name) or re.search(r"\.\.[\\/]", name):
-        raise InstallError(f"invalid manifest name '{name}': path traversal not allowed")
+    if name.startswith("/") or name.startswith("\\"):
+        raise InstallError(f"invalid manifest name '{name}': absolute path not allowed")
     return name
 
 

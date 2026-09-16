@@ -124,5 +124,5 @@ jobs:
           notes-fallback-api-key: ${{ secrets.MISTRAL_API_KEY }}
 
       - name: Publish to PyPI (trusted publishing)
-        if: true
+        if: false
         uses: OseMine/workflows/.github/actions/pypi-publish@v2
