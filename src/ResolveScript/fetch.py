@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+# Maximum download size (100 MB) to prevent DoS via unbounded downloads
+_MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024
+
 
 class FetchError(RuntimeError):
     pass
@@ -80,11 +83,13 @@ def fetch(
     try:
         try:
             with _OPENER.open(url, timeout=timeout) as response:
-                data = response.read()
+                data = response.read(_MAX_DOWNLOAD_SIZE + 1)
         except Exception as exc:  # URLError, HTTPError, timeout…
             raise FetchError(f"failed to download {url}: {exc}") from exc
     finally:
         socket.setdefaulttimeout(previous)
+    if len(data) > _MAX_DOWNLOAD_SIZE:
+        raise FetchError(f"download exceeds maximum allowed size ({_MAX_DOWNLOAD_SIZE} bytes)")
     size = len(data)
     digest = hashlib.sha256(data).hexdigest()
     if expected_sha256 and digest != expected_sha256:

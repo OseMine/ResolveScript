@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..fetch import fetch, fetch_json
@@ -13,13 +14,26 @@ class GitSourceError(RuntimeError):
     pass
 
 
+_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _sanitize_owner_repo(value: str) -> str:
+    if not _OWNER_REPO_RE.fullmatch(value):
+        raise GitSourceError(f"invalid GitHub owner/repo segment: {value!r}")
+    return value
+
+
 def codeload_url(owner: str, repo: str, ref: str | None = None) -> str:
+    owner = _sanitize_owner_repo(owner)
+    repo = _sanitize_owner_repo(repo)
     slug = ref or "HEAD"
     return f"https://codeload.github.com/{owner}/{repo}/tar.gz/{slug}"
 
 
 def default_branch(owner: str, repo: str) -> str:
     """Best-effort default branch (falls back to HEAD on failure)."""
+    owner = _sanitize_owner_repo(owner)
+    repo = _sanitize_owner_repo(repo)
     try:
         data = fetch_json(f"https://api.github.com/repos/{owner}/{repo}")
     except Exception:
@@ -33,6 +47,8 @@ def default_branch(owner: str, repo: str) -> str:
 
 def list_tags(owner: str, repo: str) -> list[str]:
     """Return release tag names (e.g. ``v1.2.3``) from the GitHub API."""
+    owner = _sanitize_owner_repo(owner)
+    repo = _sanitize_owner_repo(repo)
     url = f"https://api.github.com/repos/{owner}/{repo}/tags?per_page=100"
     data = fetch_json(url)
     if not isinstance(data, list):
@@ -41,6 +57,8 @@ def list_tags(owner: str, repo: str) -> list[str]:
 
 
 def resolve_tag(owner: str, repo: str, range_text: str | None, ref: str | None):
+    owner = _sanitize_owner_repo(owner)
+    repo = _sanitize_owner_repo(repo)
     """Pick the ref to download.
 
     An explicit ``ref`` wins. Otherwise, with ``#semver:<range>``, the highest
@@ -71,6 +89,8 @@ def download_github(
     range_text: str | None = None,
     cache_dir: Path,
 ) -> tuple[Path, str]:
+    owner = _sanitize_owner_repo(owner)
+    repo = _sanitize_owner_repo(repo)
     """Download the codeload tarball and unpack it.
 
     Returns ``(package_root, integrity_sha256)``.

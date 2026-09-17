@@ -137,8 +137,11 @@ def unpack_archive(archive: Path, dest_dir: Path) -> Path:
                 _safe_members(names)
                 _validate_tar_links(members, dest_dir)
                 if sys.version_info >= (3, 12):
+                    # Python 3.12+: use built-in filter="data" for safe extraction
                     tf.extractall(dest_dir, filter="data")
                 else:
+                    # Python < 3.12: extractall + our manual validation (_validate_tar_links,
+                    # _validate_extracted_paths) provides equivalent safety
                     tf.extractall(dest_dir)
                 _validate_extracted_paths(dest_dir, names)
     except (tarfile.TarError, zipfile.BadZipFile, OSError) as exc:
