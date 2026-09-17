@@ -7,11 +7,16 @@ drift (parity guaranteed by construction).
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from .model import Manifest, ManifestError, manifest_from_dict
+
+# DTD / entity declarations are never needed by ResolveScript manifests and
+# are the carrier for XXE and entity-expansion ("billion laughs") attacks.
+_XML_HAZARD = re.compile(r"<!DOCTYPE|<!ENTITY", re.IGNORECASE)
 
 
 def _text(el: ET.Element | None) -> str | None:
@@ -141,8 +146,20 @@ def load_manifest(path: str | Path) -> Manifest:
     return loads(text, source=str(file_path))
 
 
+def _reject_unsafe_xml(text: str, source: str) -> None:
+    """Reject DOCTYPE / entity declarations before parsing (XXE guard)."""
+    match = _XML_HAZARD.search(text)
+    if match:
+        raise ManifestError(
+            "manifest XML may not declare a DOCTYPE or entities "
+            f"(found {match.group(0)!r}); refusing to parse",
+            path=source,
+        )
+
+
 def loads(text: str, source: str = "<manifest.xml>") -> Manifest:
     """Parse manifest XML text into a :class:`Manifest` with error context."""
+    _reject_unsafe_xml(text, source)
     try:
         root = ET.fromstring(text)
     except ET.ParseError as exc:

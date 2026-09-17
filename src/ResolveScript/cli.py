@@ -429,6 +429,7 @@ def _cmd_manage_remove(args: argparse.Namespace) -> int:
     import shutil
 
     from .install.discovery import target_dir
+    from .install.installer import InstallError, validate_registry_name, validate_registry_relpath
     from .install.registry import get_extension, read_registry, remove_entry
 
     scripts_root = _resolve_scripts_root(args.scripts_root)
@@ -441,17 +442,27 @@ def _cmd_manage_remove(args: argparse.Namespace) -> int:
         )
         return 1
     as_directory = bool(entry.get("as_directory", True))
-    key = entry.get("id") or args.name
+    try:
+        key = validate_registry_name(entry.get("id") or args.name)
+        container_name = validate_registry_name(entry.get("name") or key)
+    except InstallError as exc:
+        print(f"resolvescript: manage remove: {exc}", file=sys.stderr)
+        return 1
     for target in entry.get("targets", []):
         base = target_dir(scripts_root, target)
         if as_directory:
-            container = base / (entry.get("name") or key)
+            container = base / container_name
             if container.is_dir():
                 shutil.rmtree(container)
                 print(f"removed {container}")
         else:
-            for rel in entry.get("files", []):
-                path = base / str(rel)
+            for raw_rel in entry.get("files", []):
+                try:
+                    rel = validate_registry_relpath(str(raw_rel))
+                except InstallError as exc:
+                    print(f"resolvescript: manage remove: {exc}", file=sys.stderr)
+                    return 1
+                path = base / rel
                 if path.is_file() or (path.is_symlink() and not path.exists()):
                     path.unlink()
                     print(f"removed {path}")

@@ -7,9 +7,11 @@ github (incl. ``name`` looked up in the known table).
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 
 from .fetch import fetch, sha256_file
 from .manifest.json_reader import load_manifest
@@ -18,6 +20,10 @@ from .sources import known, unpack_archive
 from .sources.git import download_github
 from .sources.release import ReleaseSpec, asset_download_url
 from .spec import Spec, SpecError, parse_specifier
+
+# Cache filenames may only be a single safe path segment; anything else
+# (path separators, traversal like "..", URL-encoded bytes) is scrubbed.
+_UNSAFE_SLUG_CHARS = re.compile(r"[^A-Za-z0-9._-]")
 
 
 class ResolveError(RuntimeError):
@@ -151,12 +157,21 @@ def resolve_spec(
 
 
 def _slug(url: str) -> str:
+    """Return a safe cache-filename fragment derived from ``url``.
+
+    The tail segment is URL-decoded and stripped to ``[A-Za-z0-9._-]`` only
+    so path separators (``/`` or ``\\``) and traversal (``..``) can never
+    escape the cache directory.  Falls back to a content-based hash when the
+    tail is empty or entirely stripped.
+    """
     import hashlib
 
     if "/" in url:
-        tail = url.rsplit("/", 1)[-1]
-        if tail:
-            return tail
+        tail = unquote(url.rsplit("/", 1)[-1])
+        if tail and tail not in (".", ".."):
+            cleaned = _UNSAFE_SLUG_CHARS.sub("_", tail)
+            if cleaned and cleaned not in (".", ".."):
+                return cleaned
     return hashlib.sha256(url.encode()).hexdigest()[:16] + ".tgz"
 
 

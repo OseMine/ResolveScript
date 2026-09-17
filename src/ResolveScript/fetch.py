@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import socket
 import tempfile
 import urllib.request
@@ -18,13 +19,85 @@ class FetchError(RuntimeError):
     pass
 
 
+# Non-public address ranges that must never be fetched. Kept explicit (rather
+# than relying on ipaddress.is_private/is_reserved, whose ranges vary across
+# Python versions) so behavior is deterministic. Includes loopback, RFC 1918,
+# CGNAT/shared space, link-local (cloud-metadata), documentation, benchmark and
+# multicast ranges for both address families.
+_BLOCKED_NETS = tuple(
+    ipaddress.ip_network(prefix)
+    for prefix in (
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.0.0.0/24",
+        "192.168.0.0/16",
+        "198.18.0.0/15",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+        "224.0.0.0/4",
+        "240.0.0.0/4",
+        "255.255.255.255/32",
+        "::/128",
+        "::1/128",
+        "100::/64",
+        "2001:db8::/32",
+        "fc00::/7",
+        "fe80::/10",
+        "ff00::/8",
+    )
+)
+
+
+def _assert_public_host(url: str) -> None:
+    """Reject URLs whose host is not a public internet address (SSRF guard).
+
+    Loopback, private (RFC 1918 / CGNAT / ULA) and link-local addresses
+    (including the cloud-metadata ``169.254.169.254``) are blocked, along
+    with documentation, benchmark, multicast, unspecified and reserved ranges.
+    """
+    host = urlparse(url).hostname
+    if not host:
+        raise FetchError(f"URL has no host: {url!r}")
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            resolved = socket.getaddrinfo(host, None)
+        except socket.gaierror as exc:
+            raise FetchError(f"cannot resolve host {host!r}: {exc}") from exc
+        addresses = [ipaddress.ip_address(info[4][0]) for info in resolved]
+    for addr in addresses:
+        if (
+            addr.is_loopback
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_unspecified
+            or any(addr in net for net in _BLOCKED_NETS)
+        ):
+            raise FetchError(
+                f"{host!r} resolves to non-public address {addr} "
+                "(loopback, private or link-local hosts are blocked)"
+            )
+
+
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Reject redirects that switch to a non-http(s) scheme (SSRF guard)."""
+    """Reject redirects to non-http(s) schemes, plaintext downgrades, or
+    non-public hosts (SSRF guard)."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913
-        scheme = urlparse(newurl).scheme.lower()
-        if scheme not in ("http", "https"):
+        old_scheme = urlparse(req.full_url).scheme.lower()
+        new_scheme = urlparse(newurl).scheme.lower()
+        if new_scheme not in ("http", "https"):
             raise FetchError(f"redirect to non-http(s) scheme blocked: {newurl!r}")
+        if old_scheme == "https" and new_scheme != "https":
+            raise FetchError(
+                f"refusing to downgrade https connection to plaintext http via redirect: {newurl!r}"
+            )
+        _assert_public_host(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -73,6 +146,7 @@ def fetch(
     """
     if not url.lower().startswith(("http://", "https://")):
         raise FetchError(f"only http/https URLs are allowed (got {url!r})")
+    _assert_public_host(url)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()

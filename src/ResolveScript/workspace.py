@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 WORKSPACE_FILE = "resolvescript.json"
@@ -40,9 +42,14 @@ def read_workspace(cwd: Path | None = None) -> dict:
 def write_workspace(data: dict, cwd: Path | None = None) -> Path:
     path = workspace_path(cwd)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
-    _atomic_replace(tmp, path)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{WORKSPACE_FILE}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2) + "\n")
+        _atomic_replace(Path(tmp_name), path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
     return path
 
 

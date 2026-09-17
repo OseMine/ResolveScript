@@ -35,7 +35,7 @@ def _validate_name(name: str) -> str:
     return name
 
 
-def _validate_registry_name(name: str) -> str:
+def validate_registry_name(name: str) -> str:
     """Validate a name from the registry (extension name, key) for safe path use."""
     if not name:
         raise InstallError("registry name is empty")
@@ -50,7 +50,7 @@ def _validate_registry_name(name: str) -> str:
     return name
 
 
-def _validate_registry_relpath(rel: str) -> str:
+def validate_registry_relpath(rel: str) -> str:
     """Validate a relative file path from the registry for safe path use."""
     if not rel:
         raise InstallError("registry relative path is empty")
@@ -416,18 +416,18 @@ def uninstall_package(name: str, options: InstallOptions) -> list[str]:
 
     removed: list[str] = []
     as_directory = bool(entry.get("as_directory", True))
-    key = _validate_registry_name(entry.get("id") or name)
+    key = validate_registry_name(entry.get("id") or name)
     for target in entry.get("targets", []):
         base = target_dir(scripts_root, target)
         if as_directory:
-            container_name = _validate_registry_name(entry.get("name") or key)
+            container_name = validate_registry_name(entry.get("name") or key)
             container = base / container_name
             if container.is_dir():
                 shutil.rmtree(container)
                 removed.append(str(container))
         else:
             for rel in entry.get("files", []):
-                safe_rel = _validate_registry_relpath(str(rel))
+                safe_rel = validate_registry_relpath(str(rel))
                 path = base / safe_rel
                 if path.is_file() or path.is_symlink() and not path.exists():
                     path.unlink()
@@ -445,5 +445,5 @@ def uninstall_package(name: str, options: InstallOptions) -> list[str]:
 def remove_entry_from_registry(scripts_root: Path, key: str) -> None:
     from .registry import remove_entry
 
-    safe_key = _validate_registry_name(key)
+    safe_key = validate_registry_name(key)
     remove_entry(scripts_root, safe_key) or remove_entry(scripts_root, safe_key.split(":")[-1])

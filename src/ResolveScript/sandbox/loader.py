@@ -5,8 +5,25 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
+import warnings
 from pathlib import Path
 from types import ModuleType
+
+# The dev/test "sandbox" only mocks the Resolve API; extension code still runs
+# with full interpreter (and OS) privileges. Make that explicit.
+_NO_ISOLATION_WARNING = (
+    "extension code runs in-process with full interpreter privileges "
+    "(the sandbox mocks the Resolve API only, not OS-level isolation)"
+)
+
+
+def _confine(path: Path, root: Path) -> Path:
+    """Resolve ``path`` and refuse anything that escapes ``root``."""
+    resolved = Path(path).resolve()
+    base = Path(root).resolve()
+    if not resolved.is_relative_to(base):
+        raise ImportError(f"refusing to load {resolved}: outside project directory {base}")
+    return resolved
 
 
 def purge_module(prefix: str) -> None:
@@ -46,11 +63,13 @@ def load_source_module(module_name: str, package_dir: Path) -> ModuleType:
         sys.path.insert(0, str(package_dir))
 
     file_path, package = _entry_file(module_name, package_dir)
+    file_path = _confine(file_path, package_dir)
     module = ModuleType(module_name)
     module.__file__ = str(file_path)
     module.__package__ = package or ""
     if package:
         module.__path__ = [str(file_path.parent)]
+    warnings.warn(_NO_ISOLATION_WARNING, RuntimeWarning, stacklevel=2)
     code = compile(file_path.read_text(encoding="utf-8"), str(file_path), "exec")
     sys.modules[module_name] = module
     exec(code, module.__dict__)
@@ -68,5 +87,6 @@ def load_built_module(module_name: str, built_file: Path) -> ModuleType:
         raise ImportError(f"cannot load {built_file} as a Python module")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
+    warnings.warn(_NO_ISOLATION_WARNING, RuntimeWarning, stacklevel=2)
     spec.loader.exec_module(module)
     return module
