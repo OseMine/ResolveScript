@@ -495,8 +495,8 @@ def _cmd_test(args: argparse.Namespace) -> int:
         env["RESOLVESCRIPT_BUILT_PATH"] = str(built_file)
         runner = (
             "import os, sys, pathlib\n"
-            "from resolve_script.sandbox.env import install_fake_resolve\n"
-            "from resolve_script.sandbox.loader import load_built_module\n"
+            "from ResolveScript.sandbox.env import install_fake_resolve\n"
+            "from ResolveScript.sandbox.loader import load_built_module\n"
             "install_fake_resolve()\n"
             "if os.environ.get('RESOLVESCRIPT_TARGET') == 'built':\n"
             "    name = os.environ['RESOLVESCRIPT_MODULE']\n"

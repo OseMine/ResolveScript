@@ -1,7 +1,7 @@
 # ResolveScript — Plan & Todos
 
-> A Python CLI framework for **building, coding, testing, packaging and
-> installing DaVinci Resolve Python extensions** — distributed as
+> A Python **CLI and library framework** for **building, coding, testing,
+> packaging and installing DaVinci Resolve Python extensions** — distributed as
 > `pip install resolvescript`.
 >
 > Generalizes the workflow proven in `X:\coding\Rotoscope`:
@@ -15,6 +15,11 @@
 > `resolvescript.json`, and the CLI resolves the exact artifact, verifies its
 > SHA-256, installs it into Resolve, and tracks every install in a lockfile
 > so `update` / `remove` / `list` are deterministic.
+>
+> **Library API**: every CLI feature is also available as a Python API:
+> `import ResolveScript as rs` gives you scaffold, analyze, consolidate,
+> package, install, sandbox, manifest loaders, spec resolution, and more —
+> usable in scripts, REPLs, and build automation without invoking the CLI.
 
 ---
 
@@ -46,7 +51,9 @@ targets the framework instead of Resolve, so specifier grammar, integrity
 Replace the hand-rolled, project-specific scripts in Rotoscope
 (`scripts/build.py`, `scripts/install.py`, `scripts/install.lua`,
 `dev/sandbox.py`, tests, release workflow) with a **generic, pip-installable
-CLI** that any Resolve extension project can use:
+CLI and library framework** that any Resolve extension project can use.
+
+### CLI usage
 
 ```
 pip install resolvescript
@@ -71,6 +78,39 @@ resolvescript consolidate <package>      # one-off: merge a package dir into one
 resolvescript extensions add <spec>      # install a FRAMEWORK extension (plugin, into the CLI, not Resolve)
 resolvescript extensions remove <name>   # uninstall a plugin
 resolvescript extensions list            # list installed plugins
+```
+
+### Library usage (scripted framework)
+
+```
+import ResolveScript as rs
+
+# scaffold a new project
+root, written = rs.scaffold_project("my_tool", destination=".")
+
+# static analysis
+issues = rs.analyze_project(root)
+for issue in issues:
+    print(issue)
+
+# load & validate manifest
+manifest = rs.load_manifest(root / "manifest.json")
+rs.validate_manifest_or_throw(manifest)
+
+# consolidate to a single file
+cfg = rs.config_from_manifest(root, manifest)
+result = rs.consolidate(cfg)
+print(rs.summarize(result, cfg))
+
+# package a release artifact
+pkg = rs.package_project(root)
+print(pkg.archive)
+
+# sandbox for testing
+from rs.sandbox import build_default_env, fake_resolve_module, run_smoke
+env = build_default_env()
+fake_resolve_module(env)
+run_smoke(my_module)
 ```
 
 `add/install/update/remove/search` operate on **Resolve scripts**. Manage
@@ -99,11 +139,11 @@ Name **`resolvescript`** is available on PyPI (verified 2026-09-14, 404).
 | Rotoscope component | Generalizes into | Command |
 |---|---|---|
 | `rotoscope/` package (core/timeline/clip/fusion/roto/utils) | becomes **template source** in `create`; framework stays API-agnostic | `create` |
-| `scripts/build.py` (collect → topo-sort → strip internal imports → hoist `__future__` → emit) | `resolve_script/consolidate.py` | `build`, `consolidate` |
-| `dev/sandbox.py` (mock `DaVinciResolveScript`, smoke tests, REPL) | `resolve_script/sandbox/` (reusable mock + runner) | `dev`, `test` |
+| `scripts/build.py` (collect → topo-sort → strip internal imports → hoist `__future__` → emit) | `ResolveScript/consolidate.py` | `build`, `consolidate` |
+| `dev/sandbox.py` (mock `DaVinciResolveScript`, smoke tests, REPL) | `ResolveScript/sandbox/` (reusable mock + runner) | `dev`, `test` |
 | `dev/hello_resolve.py` | template in `create` | `create` |
-| `scripts/install.py` (source/built/release modes, per-OS scripts root) | `resolve_script/install.py` (manifest-driven) | `install` |
-| `tests/test_build.py`, `tests/test_sandbox.py` | template + `resolve_script.testing` helpers | `create`, `test` |
+| `scripts/install.py` (source/built/release modes, per-OS scripts root) | `ResolveScript/install.py` (manifest-driven) | `install` |
+| `tests/test_build.py`, `tests/test_sandbox.py` | template + `ResolveScript.testing` helpers | `create`, `test` |
 | `.github/workflows/release.yml` (build → artifact → release) | `resolvescript package` + CI template | `package` |
 
 Key generalization point: **nothing in the framework is Rotoscope-specific**
@@ -122,7 +162,7 @@ ResolveScript/
 ├── README.md
 ├── LICENSE
 ├── src/
-│   └── resolve_script/
+│   └── ResolveScript/
 │       ├── __init__.py               # __version__
 │       ├── cli.py                    # entry point: resolvescript
 │       ├── config.py                 # locate/read Config (manifest discovery, env)
@@ -513,8 +553,8 @@ anything optional becomes a plugin, not a core feature (§9).
 ## 7. Milestones & TODO checkboxes
 
 ### M0 — Repo bootstrap
-- [ ] Create `src/resolve_script/` package, `pyproject.toml` (name `resolvescript`, entry point `resolvescript = resolve_script.cli:main`), README stub, LICENSE
-- [ ] `__version__`, `resolve_script/__init__.py`
+- [ ] Create `src/ResolveScript/` package, `pyproject.toml` (name `resolvescript`, entry point `resolvescript = ResolveScript.cli:main`), README stub, LICENSE
+- [ ] `__version__`, `ResolveScript/__init__.py`
 - [ ] `cli.py` with argparse parent wiring: `create dev test analyze build package install manage consolidate extensions --version`
 - [ ] `.gitignore` (+ `dist/`, `*.egg-info`, `__pycache__`)
 - [ ] CI: `ci.yml` using shared `OseMine/workflows` `ci` action (lint `ruff check .`, `pytest`)

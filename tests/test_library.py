@@ -12,7 +12,7 @@ import importlib
 
 import pytest
 
-import resolve_script as rs
+import ResolveScript as rs
 
 
 FUNCTION_EXPORTS = {
@@ -114,16 +114,16 @@ def test_version() -> None:
 def test_submodule_imports_still_work() -> None:
     """Deep imports used by real scripts keep resolving after the re-exports."""
     for dotted in (
-        "resolve_script.consolidate",
-        "resolve_script.fetch",
-        "resolve_script.manifest",
-        "resolve_script.install",
-        "resolve_script.sandbox",
-        "resolve_script.sources",
+        "ResolveScript.consolidate",
+        "ResolveScript.fetch",
+        "ResolveScript.manifest",
+        "ResolveScript.install",
+        "ResolveScript.sandbox",
+        "ResolveScript.sources",
     ):
         assert importlib.import_module(dotted) is not None
     with pytest.raises(ImportError):
-        importlib.import_module("resolve_script.definitely_not_a_module")
+        importlib.import_module("ResolveScript.definitely_not_a_module")
 
 
 def test_scripted_pipeline(tmp_path) -> None:

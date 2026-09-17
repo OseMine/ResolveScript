@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from resolve_script.cli import main
-from resolve_script.install.discovery import (
+from ResolveScript.cli import main
+from ResolveScript.install.discovery import (
     default_scripts_root,
     resolve_scripts_root,
     target_dir,
 )
-from resolve_script.install.installer import (
+from ResolveScript.install.installer import (
     InstallError,
     InstallOptions,
     discover_entrypoint,
@@ -22,15 +22,15 @@ from resolve_script.install.installer import (
     select_files,
     uninstall_package,
 )
-from resolve_script.install.registry import (
+from ResolveScript.install.registry import (
     add_or_update_entry,
     get_extension,
     read_registry,
     remove_entry,
 )
-from resolve_script.manifest.json_reader import load_manifest
-from resolve_script.manifest.model import ManifestError
-from resolve_script.scaffold import scaffold_project
+from ResolveScript.manifest.json_reader import load_manifest
+from ResolveScript.manifest.model import ManifestError
+from ResolveScript.scaffold import scaffold_project
 
 
 # ---------------------------------------------------------------------------
@@ -38,20 +38,20 @@ from resolve_script.scaffold import scaffold_project
 # ---------------------------------------------------------------------------
 def test_default_scripts_root_windows(monkeypatch) -> None:
     monkeypatch.setenv("APPDATA", r"C:\Users\me\AppData\Roaming")
-    monkeypatch.setattr("resolve_script.install.discovery.platform.system", lambda: "Windows")
+    monkeypatch.setattr("ResolveScript.install.discovery.platform.system", lambda: "Windows")
     assert default_scripts_root() == Path(
         r"C:\Users\me\AppData\Roaming\Blackmagic Design\DaVinci Resolve\Fusion\Scripts"
     )
 
 
 def test_default_scripts_root_macos(monkeypatch) -> None:
-    monkeypatch.setattr("resolve_script.install.discovery.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("ResolveScript.install.discovery.platform.system", lambda: "Darwin")
     root = default_scripts_root()
     assert "DaVinci Resolve" in str(root) and root.name == "Scripts"
 
 
 def test_default_scripts_root_linux(monkeypatch) -> None:
-    monkeypatch.setattr("resolve_script.install.discovery.platform.system", lambda: "Linux")
+    monkeypatch.setattr("ResolveScript.install.discovery.platform.system", lambda: "Linux")
     root = default_scripts_root()
     assert root.name == "Scripts"
     assert "DaVinci Resolve" in str(root)

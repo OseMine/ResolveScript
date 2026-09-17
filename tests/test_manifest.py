@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from resolve_script.manifest.json_reader import dumps, load_manifest
-from resolve_script.manifest.json_reader import loads as json_loads
-from resolve_script.manifest.model import Manifest, ManifestError
-from resolve_script.manifest.validation import is_valid_semver, validate_manifest, validate_target
-from resolve_script.manifest.xml_reader import loads as xml_loads
+from ResolveScript.manifest.json_reader import dumps, load_manifest
+from ResolveScript.manifest.json_reader import loads as json_loads
+from ResolveScript.manifest.model import Manifest, ManifestError
+from ResolveScript.manifest.validation import is_valid_semver, validate_manifest, validate_target
+from ResolveScript.manifest.xml_reader import loads as xml_loads
 
 KITCHEN_SINK_JSON = {
     "name": "my_extension",

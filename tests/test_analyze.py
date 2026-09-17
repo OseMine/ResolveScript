@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 
-from resolve_script.analyze import analyze_project
-from resolve_script.cli import main
-from resolve_script.scaffold import scaffold_project
+from ResolveScript.analyze import analyze_project
+from ResolveScript.cli import main
+from ResolveScript.scaffold import scaffold_project
 
 
 def test_analyze_scaffolded_project(tmp_path) -> None:
     scaffold_project("hello", destination=tmp_path)
     manifest_path = tmp_path / "hello" / "manifest.json"
-    from resolve_script.manifest.json_reader import load_manifest
+    from ResolveScript.manifest.json_reader import load_manifest
 
     manifest = load_manifest(manifest_path)
     analysis = analyze_project(tmp_path / "hello", manifest)

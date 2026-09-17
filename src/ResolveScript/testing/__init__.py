@@ -2,5 +2,5 @@
 
 Load the shared fixtures in a project's ``conftest.py`` with::
 
-    pytest_plugins = ["resolve_script.testing.fixtures"]
+    pytest_plugins = ["ResolveScript.testing.fixtures"]
 """

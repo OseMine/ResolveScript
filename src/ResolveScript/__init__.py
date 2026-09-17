@@ -5,7 +5,7 @@ every feature directly from a script or an interactive session.
 
 Quick start — create and inspect a new script project::
 
-    import resolve_script as rs
+    import ResolveScript as rs
 
     root, written = rs.scaffold_project(
         "my-tool", destination=".", fmt="json", template="default"
@@ -23,30 +23,30 @@ Quick start — create and inspect a new script project::
 
 Borrow a ``Source`` spec from a known GitHub project::
 
-    import resolve_script as rs
+    import ResolveScript as rs
 
     print(rs.lookup("hello"))          # canonical source for a known name
     values = rs.build_values("my-tool")  # template substition values
 
 Sit scripts in the Resolve environment::
 
-    from resolve_script.sandbox import build_default_env, fake_resolve_module
-    from resolve_script.install import install_project
+    from ResolveScript.sandbox import build_default_env, fake_resolve_module
+    from ResolveScript.install import install_project
 
     env = build_default_env()
     fake_resolve_module(env)           # injects a fake ``resolve`` module
     install_project(env, run_smoke=True, root=".")
 
 Every public name is available both at the package root and from its owning
-module, e.g. ``resolve_script.consolidate`` is also the top-level
+module, e.g. ``ResolveScript.consolidate`` is also the top-level
 ``consolidate`` function.
 
 Subpackages ship their own convenience imports:
 
-* ``resolve_script.manifest``  — manifest model, loaders, validators
-* ``resolve_script.sandbox``   — mock Resolve API, smoke runs, REPL
-* ``resolve_script.sources``   — archive/git/known-source helpers
-* ``resolve_script.install``   — install, registry and target resolution
+* ``ResolveScript.manifest``  — manifest model, loaders, validators
+* ``ResolveScript.sandbox``   — mock Resolve API, smoke runs, REPL
+* ``ResolveScript.sources``   — archive/git/known-source helpers
+* ``ResolveScript.install``   — install, registry and target resolution
 """
 
 from __future__ import annotations

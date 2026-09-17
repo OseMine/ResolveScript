@@ -7,10 +7,10 @@ import sys
 
 import pytest
 
-from resolve_script.cli import main
-from resolve_script.manifest.json_reader import load_manifest
-from resolve_script.manifest.validation import validate_manifest
-from resolve_script.scaffold import (
+from ResolveScript.cli import main
+from ResolveScript.manifest.json_reader import load_manifest
+from ResolveScript.manifest.validation import validate_manifest
+from ResolveScript.scaffold import (
     ScaffoldError,
     _walk_templates,
     normalize_name,
@@ -101,7 +101,7 @@ def test_walk_templates_skips_pycache(tmp_path) -> None:
 
 
 def test_scaffold_survives_pycache_in_templates(tmp_path, monkeypatch) -> None:
-    from resolve_script import scaffold as scaffold_mod
+    from ResolveScript import scaffold as scaffold_mod
 
     fake = tmp_path / "extension"
     (fake / "@NAME@").mkdir(parents=True)

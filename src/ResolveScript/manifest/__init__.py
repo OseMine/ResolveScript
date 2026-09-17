@@ -2,7 +2,7 @@
 
 Load a manifest from a file with format auto-detection::
 
-    from resolve_script.manifest import load_manifest
+    from ResolveScript.manifest import load_manifest
     manifest = load_manifest("my-tool/manifest.json")
 """
 

@@ -10,4 +10,4 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-pytest_plugins = ["resolve_script.testing.fixtures"]
+pytest_plugins = ["ResolveScript.testing.fixtures"]

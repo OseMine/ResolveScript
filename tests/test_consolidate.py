@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from resolve_script.consolidate import (
+from ResolveScript.consolidate import (
     BuildConfig,
     ConsolidateError,
     collect_python_files,
@@ -20,7 +20,7 @@ from resolve_script.consolidate import (
     read_module_content,
     strip_internal_imports,
 )
-from resolve_script.manifest.json_reader import loads as manifest_loads
+from ResolveScript.manifest.json_reader import loads as manifest_loads
 
 
 def write_package(root: Path, files: dict[str, str]) -> Path:
@@ -437,7 +437,7 @@ def test_strip_internal_imports_multiline_and_normal(tmp_path: Path) -> None:
 
 
 def test_cli_build_from_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from resolve_script import cli
+    from ResolveScript import cli
 
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
@@ -452,7 +452,7 @@ def test_cli_build_from_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def test_cli_build_output_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from resolve_script import cli
+    from ResolveScript import cli
 
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
@@ -467,14 +467,14 @@ def test_cli_build_output_override(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_cli_build_missing_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from resolve_script import cli
+    from ResolveScript import cli
 
     monkeypatch.chdir(tmp_path)
     assert cli.main(["build"]) == 1
 
 
 def test_cli_consolidate_manifest_free(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from resolve_script import cli
+    from ResolveScript import cli
 
     pkg = write_package(tmp_path, {"__init__.py": "", "core.py": "VALUE = 2\n"})
     out = tmp_path / "single.py"

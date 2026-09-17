@@ -1,7 +1,7 @@
 """XML manifest reader: ElementTree → same dict → same :class:`Manifest`.
 
 The XML shape mirrors the JSON shape 1:1 so both readers normalize through the
-same :func:`~resolve_script.manifest.model.manifest_from_dict` and can never
+same :func:`~ResolveScript.manifest.model.manifest_from_dict` and can never
 drift (parity guaranteed by construction).
 """
 

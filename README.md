@@ -112,10 +112,10 @@ Installs drop into each OS's Resolve Scripts root under the manifest `targets`. 
 
 ## Library API
 
-`resolve_script` is a first-class Python package — import it in any script:
+`ResolveScript` is a first-class Python package — import it in any script:
 
 ```python
-import resolve_script as rs
+import ResolveScript as rs
 
 # scaffold a new project
 root, written = rs.scaffold_project("my_tool", destination=".")
@@ -137,12 +137,12 @@ pkg = rs.package_project(root)
 print(pkg.archive)
 ```
 
-Every name exported at the package root is also available from its owning submodule, e.g. `rs.consolidate` mirrors `resolve_script.consolidate.consolidate`. The major subpackages are:
+Every name exported at the package root is also available from its owning submodule, e.g. `rs.consolidate` mirrors `ResolveScript.consolidate.consolidate`. The major subpackages are:
 
-- `resolve_script.manifest` — model, loaders, validators
-- `resolve_script.sandbox` — mock Resolve API, smoke runs, REPL
-- `resolve_script.sources` — archive/GitHub/known-source helpers
-- `resolve_script.install` — install, registry, target resolution
+- `ResolveScript.manifest` — model, loaders, validators
+- `ResolveScript.sandbox` — mock Resolve API, smoke runs, REPL
+- `ResolveScript.sources` — archive/GitHub/known-source helpers
+- `ResolveScript.install` — install, registry, target resolution
 
 Version: `rs.get_version()` returns the installed version string.
 

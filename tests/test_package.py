@@ -6,9 +6,9 @@ import tarfile
 
 import pytest
 
-from resolve_script.cli import main
-from resolve_script.package import PackageError, _sha256, package_project
-from resolve_script.scaffold import scaffold_project
+from ResolveScript.cli import main
+from ResolveScript.package import PackageError, _sha256, package_project
+from ResolveScript.scaffold import scaffold_project
 
 
 def test_package_scaffold(tmp_path) -> None:

@@ -1,6 +1,6 @@
-"""Package version metadata (imported by ``resolve_script.__init__``)."""
+"""Package version metadata (imported by ``ResolveScript.__init__``)."""
 
-__version__ = "0.1.2-alpha"
+__version__ = "0.1.3-alpha"
 
 
 def get_version() -> str:

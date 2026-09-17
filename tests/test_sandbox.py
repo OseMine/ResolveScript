@@ -7,18 +7,18 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from resolve_script.cli import main
-from resolve_script.sandbox.env import (
+from ResolveScript.cli import main
+from ResolveScript.sandbox.env import (
     DEFAULT_PROJECT,
     FUSION_SCRIPT_MODULE,
     build_default_env,
     fake_resolve_module,
     install_fake_resolve,
 )
-from resolve_script.sandbox.loader import load_built_module, load_source_module, purge_module
-from resolve_script.sandbox.repl import default_namespace
-from resolve_script.sandbox.smoke import discover_exports, run_smoke
-from resolve_script.scaffold import scaffold_project
+from ResolveScript.sandbox.loader import load_built_module, load_source_module, purge_module
+from ResolveScript.sandbox.repl import default_namespace
+from ResolveScript.sandbox.smoke import discover_exports, run_smoke
+from ResolveScript.scaffold import scaffold_project
 
 
 # ---------------------------------------------------------------------------

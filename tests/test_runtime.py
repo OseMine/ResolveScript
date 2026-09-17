@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from resolve_script.resolver import ResolveError, lockfile_satisfies, resolve_spec
-from resolve_script.semver import SemVerError, Version, matches, pick_best
-from resolve_script.spec import SpecError, parse_specifier
-from resolve_script.workspace import add_dependency, read_workspace, remove_dependency
+from ResolveScript.resolver import ResolveError, lockfile_satisfies, resolve_spec
+from ResolveScript.semver import SemVerError, Version, matches, pick_best
+from ResolveScript.spec import SpecError, parse_specifier
+from ResolveScript.workspace import add_dependency, read_workspace, remove_dependency
 
 
 def _write_package(path: Path, name: str, version: str = "1.2.3") -> Path:
@@ -93,7 +93,7 @@ def test_parse_invalid_github(tmp_path) -> None:
 
 
 def test_release_asset_url() -> None:
-    from resolve_script.sources.release import ReleaseSpec, asset_download_url
+    from ResolveScript.sources.release import ReleaseSpec, asset_download_url
 
     assert (
         asset_download_url(ReleaseSpec(url="https://x.example/a.tgz"), "a", "1.0")
@@ -188,8 +188,8 @@ def test_resolve_unknown_name(tmp_path) -> None:
 
 
 def test_resolve_github_semver(tmp_path, monkeypatch) -> None:
-    from resolve_script.fetch import Fetched, sha256_file
-    from resolve_script.sources import git
+    from ResolveScript.fetch import Fetched, sha256_file
+    from ResolveScript.sources import git
 
     pkg = _write_package(tmp_path / "src", "gizmo", "1.2.0")
     archive = _tar(pkg, tmp_path / "gizmo-1.2.0.tar.gz")
@@ -226,8 +226,8 @@ def test_resolve_github_semver(tmp_path, monkeypatch) -> None:
 
 
 def test_resolve_github_precise_ref(tmp_path, monkeypatch) -> None:
-    from resolve_script.fetch import Fetched, sha256_file
-    from resolve_script.sources import git
+    from ResolveScript.fetch import Fetched, sha256_file
+    from ResolveScript.sources import git
 
     pkg = _write_package(tmp_path / "src", "gizmo", "1.2.0")
     archive = _tar(pkg, tmp_path / "gizmo-1.2.0.tar.gz")
@@ -272,7 +272,7 @@ def test_lockfile_satisfies(tmp_path) -> None:
 # workspace
 # --------------------------------------------------------------------------
 def test_workspace_add_remove(tmp_path) -> None:
-    from resolve_script.workspace import save
+    from ResolveScript.workspace import save
 
     data = add_dependency("widget", "github:OseMine/widget#semver:^1.0", tmp_path)
     save(data, tmp_path)
@@ -286,7 +286,7 @@ def test_workspace_add_remove(tmp_path) -> None:
 # --------------------------------------------------------------------------
 def _run_cli(tmp_path, monkeypatch, argv, cwd=None):
 
-    from resolve_script.cli import main
+    from ResolveScript.cli import main
 
     target = cwd or tmp_path
     monkeypatch.chdir(target)
@@ -294,8 +294,8 @@ def _run_cli(tmp_path, monkeypatch, argv, cwd=None):
 
 
 def test_cli_add_from_archive_then_install_locked(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
-    from resolve_script.install.registry import get_extension, read_registry
+    from ResolveScript.cli import main
+    from ResolveScript.install.registry import get_extension, read_registry
 
     pkg = _write_package(tmp_path / "src", "gizmo", "2.0.0")
     archive = _tar(pkg, tmp_path / "gizmo-2.0.0.tar.gz")
@@ -336,9 +336,9 @@ def test_cli_add_from_archive_then_install_locked(tmp_path, monkeypatch, capsys)
 
 
 def test_cli_install_author_flow_and_workspace_materialize(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
-    from resolve_script.install.registry import get_extension, read_registry
-    from resolve_script.scaffold import scaffold_project
+    from ResolveScript.cli import main
+    from ResolveScript.install.registry import get_extension, read_registry
+    from ResolveScript.scaffold import scaffold_project
 
     scripts = tmp_path / "Scripts"
     scaffold_project("demo", destination=tmp_path)
@@ -366,8 +366,8 @@ def test_cli_install_author_flow_and_workspace_materialize(tmp_path, monkeypatch
 
 
 def test_cli_update_precise(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
-    from resolve_script.install.registry import get_extension, read_registry
+    from ResolveScript.cli import main
+    from ResolveScript.install.registry import get_extension, read_registry
 
     scripts = tmp_path / "Scripts"
     archive = _tar(_write_package(tmp_path / "src", "gizmo", "2.0.0"), tmp_path / "gizmo.tar.gz")
@@ -384,7 +384,7 @@ def test_cli_update_precise(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_cli_update_requires_workspace(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
+    from ResolveScript.cli import main
 
     monkeypatch.chdir(tmp_path)
     assert main(["update"]) == 2
@@ -392,7 +392,7 @@ def test_cli_update_requires_workspace(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_cli_search_known(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
+    from ResolveScript.cli import main
 
     monkeypatch.chdir(tmp_path)
     assert main(["search", "hello"]) == 0
@@ -401,7 +401,7 @@ def test_cli_search_known(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_cli_manage_list_json(tmp_path, monkeypatch, capsys) -> None:
-    from resolve_script.cli import main
+    from ResolveScript.cli import main
 
     monkeypatch.chdir(tmp_path)
     assert main(["manage", "list", "--json"]) == 0

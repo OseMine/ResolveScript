@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from resolve_script import __version__
-from resolve_script.cli import main
+from ResolveScript import __version__
+from ResolveScript.cli import main
 
 
 def test_version(capsys) -> None:
@@ -50,7 +50,7 @@ def test_remove_uninstalled_reports_error(capsys) -> None:
 
 def test_author_flow_e2e(tmp_path, monkeypatch, capsys) -> None:
     """create -> dev -> build -> test --built -> package -> install -> list -> remove."""
-    from resolve_script.scaffold import scaffold_project
+    from ResolveScript.scaffold import scaffold_project
 
     scaffold_project("demo", destination=tmp_path)
     project = tmp_path / "demo"

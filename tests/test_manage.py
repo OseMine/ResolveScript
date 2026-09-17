@@ -5,8 +5,8 @@ from __future__ import annotations
 import tarfile
 from pathlib import Path
 
-from resolve_script.cli import main
-from resolve_script.install.registry import get_extension, read_registry
+from ResolveScript.cli import main
+from ResolveScript.install.registry import get_extension, read_registry
 
 
 def _tar(package_root: Path, dest: Path) -> Path:

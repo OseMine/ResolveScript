@@ -6,14 +6,14 @@ All notable changes to this project are documented here.
 
 ### Added
 
-- Rich library API: `import resolve_script` now exposes 140+ public names
+- Rich library API: `import ResolveScript` now exposes 140+ public names
   across manifest, sources, sandbox, install, config, spec, resolver,
   workspace, semver, scaffold, analyze, consolidate, package, and fetch
   — usable in scripts and REPLs without the CLI.
-- Subpackage convenience imports: `resolve_script.manifest`, `resolve_script.sandbox`,
-  `resolve_script.sources`, `resolve_script.install` mirror rotoscope-style
+- Subpackage convenience imports: `ResolveScript.manifest`, `ResolveScript.sandbox`,
+  `ResolveScript.sources`, `ResolveScript.install` mirror rotoscope-style
   organization.
-- `resolve_script.get_version()` convenience function.
+- `ResolveScript.get_version()` convenience function.
 - New test suite `tests/test_library.py` exercising the top-level surface and a
   full scripted pipeline (scaffold → analyze → consolidate → package).
 

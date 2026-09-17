@@ -2,8 +2,8 @@
 
 Typical usage from a test or script::
 
-    from resolve_script.sandbox.env import install_fake_resolve
-    from resolve_script.sandbox.smoke import run_smoke
+    from ResolveScript.sandbox.env import install_fake_resolve
+    from ResolveScript.sandbox.smoke import run_smoke
 
     install_fake_resolve()
     result = run_smoke(my_module)
