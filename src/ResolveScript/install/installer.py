@@ -35,6 +35,36 @@ def _validate_name(name: str) -> str:
     return name
 
 
+def _validate_registry_name(name: str) -> str:
+    """Validate a name from the registry (extension name, key) for safe path use."""
+    if not name:
+        raise InstallError("registry name is empty")
+    if ".." in name:
+        raise InstallError(f"invalid registry name '{name}': path traversal not allowed")
+    if name.startswith("/") or name.startswith("\\"):
+        raise InstallError(f"invalid registry name '{name}': absolute path not allowed")
+    # Only allow alphanumeric, hyphen, underscore, dot
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+        raise InstallError(f"invalid registry name '{name}': contains invalid characters")
+    return name
+
+
+def _validate_registry_relpath(rel: str) -> str:
+    """Validate a relative file path from the registry for safe path use."""
+    if not rel:
+        raise InstallError("registry relative path is empty")
+    # Normalize and check for path traversal
+    p = Path(rel)
+    if p.is_absolute():
+        raise InstallError(f"registry path '{rel}' is absolute")
+    # Check each part for traversal
+    for part in p.parts:
+        if part == "..":
+            raise InstallError(f"registry path '{rel}' contains path traversal")
+    return rel
+
+
 class InstallError(Exception):
     pass
 
@@ -386,17 +416,19 @@ def uninstall_package(name: str, options: InstallOptions) -> list[str]:
 
     removed: list[str] = []
     as_directory = bool(entry.get("as_directory", True))
-    key = entry.get("id") or name
+    key = _validate_registry_name(entry.get("id") or name)
     for target in entry.get("targets", []):
         base = target_dir(scripts_root, target)
         if as_directory:
-            container = base / (entry.get("name") or key)
+            container_name = _validate_registry_name(entry.get("name") or key)
+            container = base / container_name
             if container.is_dir():
                 shutil.rmtree(container)
                 removed.append(str(container))
         else:
             for rel in entry.get("files", []):
-                path = base / str(rel)
+                safe_rel = _validate_registry_relpath(str(rel))
+                path = base / safe_rel
                 if path.is_file() or path.is_symlink() and not path.exists():
                     path.unlink()
                     removed.append(str(path))
@@ -413,4 +445,5 @@ def uninstall_package(name: str, options: InstallOptions) -> list[str]:
 def remove_entry_from_registry(scripts_root: Path, key: str) -> None:
     from .registry import remove_entry
 
-    remove_entry(scripts_root, key) or remove_entry(scripts_root, key.split(":")[-1])
+    safe_key = _validate_registry_name(key)
+    remove_entry(scripts_root, safe_key) or remove_entry(scripts_root, safe_key.split(":")[-1])

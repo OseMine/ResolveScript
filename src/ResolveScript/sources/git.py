@@ -15,11 +15,20 @@ class GitSourceError(RuntimeError):
 
 
 _OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+# Safe ref pattern: alphanumeric, hyphen, underscore, dot, slash (for tags like v1.2.3)
+# No path traversal sequences, no null bytes, reasonable length
+_REF_RE = re.compile(r"^[A-Za-z0-9_.-/]{1,250}$")
 
 
 def _sanitize_owner_repo(value: str) -> str:
     if not _OWNER_REPO_RE.fullmatch(value):
         raise GitSourceError(f"invalid GitHub owner/repo segment: {value!r}")
+    return value
+
+
+def _sanitize_ref(value: str) -> str:
+    if not _REF_RE.fullmatch(value):
+        raise GitSourceError(f"invalid GitHub ref (path traversal risk): {value!r}")
     return value
 
 
@@ -59,6 +68,8 @@ def list_tags(owner: str, repo: str) -> list[str]:
 def resolve_tag(owner: str, repo: str, range_text: str | None, ref: str | None):
     owner = _sanitize_owner_repo(owner)
     repo = _sanitize_owner_repo(repo)
+    if ref:
+        ref = _sanitize_ref(ref)
     """Pick the ref to download.
 
     An explicit ``ref`` wins. Otherwise, with ``#semver:<range>``, the highest
@@ -99,6 +110,7 @@ def download_github(
     if selected and selected != "HEAD" and selected.startswith("v"):
         # keep the v-prefixed tag if that is what the repo calls it
         pass
+    selected = _sanitize_ref(selected) if selected != "HEAD" else "HEAD"
     url = codeload_url(owner, repo, None if selected == "HEAD" else selected)
     cache_dir.mkdir(parents=True, exist_ok=True)
     archive = cache_dir / f"{owner}-{repo}-{selected or 'head'}.tgz"
