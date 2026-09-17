@@ -1,6 +1,15 @@
 # resolvescript
+<p align="center">
+  <strong>The only resolve scripting framework out there.</strong>
+  <br /><br />
+  <img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&amp;logo=python&amp;logoColor=ffdd54" alt="Python" />
+  <img src="https://img.shields.io/badge/davinci_resolve-%23233A51.svg?style=for-the-badge&amp;logo=davinciresolve&amp;logoColor=white" alt="DaVinci Resolve" />
+  <img src="https://img.shields.io/badge/pypi-%23ececec.svg?style=for-the-badge&amp;logo=pypi&amp;logoColor=1f73b7" alt="PyPI" />
+  <img src="https://img.shields.io/badge/github%20actions-%232671E5.svg?style=for-the-badge&amp;logo=githubactions&amp;logoColor=white" alt="GitHub Actions" />
+</p>
 
 ---
+
 ## Overview
 Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve) Python scripts and plugins: a small CLI with an npm-style workflow for the Resolve `Scripts/` tree.
 
@@ -14,10 +23,11 @@ Install with pip: `pip install resolvescript` (Python 3.12+).
 
 
 
-| Aspect   |Specification           |
-| -------- | ---------------------- |
-| Current version  | (version here)         |
-| supported|Resolve Free/Studio 18+ |
+| Aspect          | Specification                     |
+| --------------- | --------------------------------- |
+| Current version | v0.1.4-alpha                      |
+| Resolve support | DaVinci Resolve Free & Studio 18+ |
+| License         | MIT                               |
 
 ## Quickstart
 
