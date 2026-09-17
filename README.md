@@ -1,5 +1,7 @@
 # resolvescript
 
+---
+## Overview
 Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve) Python scripts and plugins: a small CLI with an npm-style workflow for the Resolve `Scripts/` tree.
 
 - `create` scaffolds a project with a `manifest.json` and smoke tests
@@ -9,6 +11,13 @@ Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.
 - `package` emits `dist/<name>-<version>.tar.gz` plus `SHA256SUMS.txt`
 
 Install with pip: `pip install resolvescript` (Python 3.12+).
+
+
+
+| Aspect   |Specification           |
+| -------- | ---------------------- |
+| Current version  | (version here)         |
+| supported|Resolve Free/Studio 18+ |
 
 ## Quickstart
 
