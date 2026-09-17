@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## unreleased
+
+### Added
+
+- Rich library API: `import resolve_script` now exposes 140+ public names
+  across manifest, sources, sandbox, install, config, spec, resolver,
+  workspace, semver, scaffold, analyze, consolidate, package, and fetch
+  — usable in scripts and REPLs without the CLI.
+- Subpackage convenience imports: `resolve_script.manifest`, `resolve_script.sandbox`,
+  `resolve_script.sources`, `resolve_script.install` mirror rotoscope-style
+  organization.
+- `resolve_script.get_version()` convenience function.
+- New test suite `tests/test_library.py` exercising the top-level surface and a
+  full scripted pipeline (scaffold → analyze → consolidate → package).
+
+### Changed
+
+- `manifest/__init__` adds `load_manifest(path)` auto-detecting JSON/XML by
+  suffix, plus `loads(text, fmt=...)`.
+- `sources/__init__` re-exports archive, git, known, and release helpers.
+- `sandbox/__init__` re-exports all 14 `Fake*` API classes plus env/loader/repl/smoke.
+- Ruff clean across the whole source tree.
+
 ## 0.1.2
 
 ### Changed

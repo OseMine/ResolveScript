@@ -9,6 +9,22 @@ Typical usage from a test or script::
     result = run_smoke(my_module)
 """
 
+from .api import (
+    FakeClip,
+    FakeComp,
+    FakeFolder,
+    FakeFusion,
+    FakeKey,
+    FakeMediaPool,
+    FakeMediaPoolItem,
+    FakeProject,
+    FakeProjectManager,
+    FakeResolve,
+    FakeSpline,
+    FakeStroke,
+    FakeTimeline,
+    FakeTool,
+)
 from .env import (
     DEFAULT_PROJECT,
     FUSION_SCRIPT_MODULE,
@@ -23,6 +39,20 @@ from .smoke import SmokeCheck, SmokeResult, discover_exports, run_smoke
 __all__ = [
     "DEFAULT_PROJECT",
     "FUSION_SCRIPT_MODULE",
+    "FakeClip",
+    "FakeComp",
+    "FakeFolder",
+    "FakeFusion",
+    "FakeKey",
+    "FakeMediaPool",
+    "FakeMediaPoolItem",
+    "FakeProject",
+    "FakeProjectManager",
+    "FakeResolve",
+    "FakeSpline",
+    "FakeStroke",
+    "FakeTimeline",
+    "FakeTool",
     "SmokeCheck",
     "SmokeResult",
     "build_default_env",

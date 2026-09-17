@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import tarfile
 import zipfile
-import os
-import sys
 from pathlib import Path
 
 
@@ -49,7 +48,7 @@ def _validate_tar_links(members: list[tarfile.TarInfo], dest_dir: Path) -> None:
         if not (member.issym() or member.islnk()):
             continue
         target = member.linkname
-        if os.path.isabs(target):
+        if Path(target).is_absolute():
             raise ArchiveError(
                 f"tar link has absolute target: {member.name!r} -> {target!r}"
             )
@@ -78,7 +77,7 @@ def _validate_zip_members(zf: zipfile.ZipFile, dest_dir: Path) -> None:
         if (mode & 0xF000) != 0xA000:  # not a symlink entry
             continue
         link_target = zf.read(info).decode("utf-8", errors="replace")
-        if os.path.isabs(link_target):
+        if Path(link_target).is_absolute():
             raise ArchiveError(
                 f"zip symlink has absolute target: "
                 f"{info.filename!r} -> {link_target!r}"

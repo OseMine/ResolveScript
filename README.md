@@ -110,6 +110,42 @@ Installs drop into each OS's Resolve Scripts root under the manifest `targets`. 
 
 `resolvescript` ships a mock `DaVinciResolveScript` module with a faithful-enough Resolve color/editing/page object model for testing, plus `resolvescript test --api-coverage` to report which mock methods your tests actually exercise.
 
+## Library API
+
+`resolve_script` is a first-class Python package — import it in any script:
+
+```python
+import resolve_script as rs
+
+# scaffold a new project
+root, written = rs.scaffold_project("my_tool", destination=".")
+
+# static analysis
+issues = rs.analyze_project(root)
+
+# load & validate manifest
+manifest = rs.load_manifest(root / "manifest.json")
+rs.validate_manifest_or_throw(manifest)
+
+# consolidate to a single file
+cfg = rs.config_from_manifest(root, manifest)
+result = rs.consolidate(cfg)
+print(rs.summarize(result, cfg))
+
+# package a release artifact
+pkg = rs.package_project(root)
+print(pkg.archive)
+```
+
+Every name exported at the package root is also available from its owning submodule, e.g. `rs.consolidate` mirrors `resolve_script.consolidate.consolidate`. The major subpackages are:
+
+- `resolve_script.manifest` — model, loaders, validators
+- `resolve_script.sandbox` — mock Resolve API, smoke runs, REPL
+- `resolve_script.sources` — archive/GitHub/known-source helpers
+- `resolve_script.install` — install, registry, target resolution
+
+Version: `rs.get_version()` returns the installed version string.
+
 ## Development
 
 ```console

@@ -10,6 +10,52 @@ Kind matrix (mirrors the design notes):
 ``name``        bare name -> looked up in the known-extensions table
 """
 
-from .archive import ARCHIVE_SUFFIXES, is_archive_path, unpack_archive  # noqa: F401
+from __future__ import annotations
 
-__all__ = ["ARCHIVE_SUFFIXES", "is_archive_path", "unpack_archive"]
+from .archive import (
+    ARCHIVE_SUFFIXES,
+    ArchiveError,
+    is_archive_path,
+    make_archive,
+    unpack_archive,
+)
+from .git import (
+    GitSourceError,
+    codeload_url,
+    default_branch,
+    download_github,
+    list_tags,
+    resolve_tag,
+    tags_have_version,
+)
+from .known import (
+    CONVENTIONS,
+    canonical_source,
+    known_names,
+    lookup,
+    search,
+)
+from .release import ReleaseError, ReleaseSpec, asset_download_url
+
+__all__ = [
+    "ARCHIVE_SUFFIXES",
+    "ArchiveError",
+    "CONVENTIONS",
+    "GitSourceError",
+    "ReleaseError",
+    "ReleaseSpec",
+    "asset_download_url",
+    "canonical_source",
+    "codeload_url",
+    "default_branch",
+    "download_github",
+    "is_archive_path",
+    "known_names",
+    "list_tags",
+    "lookup",
+    "make_archive",
+    "resolve_tag",
+    "search",
+    "tags_have_version",
+    "unpack_archive",
+]
