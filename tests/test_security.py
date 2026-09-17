@@ -4,7 +4,10 @@ predictable temp files, loader confinement, and cache-slug sanitization)."""
 from __future__ import annotations
 
 import json
+from http.client import HTTPMessage
+from io import BytesIO
 from pathlib import Path
+from urllib.request import Request
 
 import pytest
 
@@ -50,8 +53,10 @@ def test_fetch_rejects_non_http_scheme() -> None:
 # fetch: redirect guards
 # ---------------------------------------------------------------------------
 def _redirect(req_url: str, new_url: str) -> None:
-    request = __import__("urllib.request", fromlist=["Request"]).Request(req_url)
-    _SafeRedirectHandler().redirect_request(request, None, 302, "Found", {}, new_url)
+    request = Request(req_url)
+    _SafeRedirectHandler().redirect_request(
+        request, BytesIO(), 302, "Found", HTTPMessage(), new_url
+    )
 
 
 def test_redirect_blocks_scheme_switch() -> None:

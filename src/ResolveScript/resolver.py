@@ -59,6 +59,13 @@ def _require_package_root(package_dir: Path) -> Path:
     return package_dir
 
 
+def _spec_location(spec: Spec) -> Path:
+    """Return the local path for path/file-archive specs (narrowed access)."""
+    if spec.location is None:
+        raise ResolveError(f"{spec.source}: specifier carries no local path")
+    return spec.location
+
+
 def resolve_spec(
     spec_text: str,
     *,
@@ -80,7 +87,7 @@ def resolve_spec(
 
     # -- path source -------------------------------------------------------
     if spec.kind == "path":
-        package_dir = _require_package_root(spec.location)
+        package_dir = _require_package_root(_spec_location(spec))
         manifest = _manifest(package_dir)
         return Resolved(
             name=manifest.name,
@@ -94,8 +101,9 @@ def resolve_spec(
 
     # -- local archive -----------------------------------------------------
     if spec.kind == "file-archive":
+        location = _spec_location(spec)
         unzip_dir = work_dir / "unpacked"
-        package_dir = unpack_archive(spec.location, unzip_dir)
+        package_dir = unpack_archive(location, unzip_dir)
         package_dir = _require_package_root(package_dir)
         manifest = _manifest(package_dir)
         return Resolved(
@@ -104,7 +112,7 @@ def resolve_spec(
             kind="archive",
             package_dir=package_dir,
             source=spec.source,
-            integrity=sha256_file(spec.location),
+            integrity=sha256_file(location),
             manifest=manifest,
         )
 
@@ -176,30 +184,33 @@ def _slug(url: str) -> str:
 
 
 def _asset_url(spec: Spec) -> str:
+    url = spec.url
+    if url is None:
+        raise ResolveError(f"{spec.source}: specifier carries no URL")
     if spec.kind == "archive":
-        return spec.url
+        return url
     # manifest URL: fetch the manifest, then follow release info
     with tempfile.TemporaryDirectory() as tmp:
         payload = Path(tmp) / "manifest.json"
         try:
-            if not spec.url.lower().startswith("https://"):
+            if not url.lower().startswith("https://"):
                 raise ResolveError(
-                    f"refusing to fetch package manifest over plaintext http: {spec.url}"
+                    f"refusing to fetch package manifest over plaintext http: {url}"
                 )
-            fetch(url=spec.url, dest=payload)
+            fetch(url=url, dest=payload)
         except Exception as exc:
-            raise ResolveError(f"failed to fetch manifest {spec.url}: {exc}") from exc
+            raise ResolveError(f"failed to fetch manifest {url}: {exc}") from exc
         try:
             data = json.loads(payload.read_text("utf-8"))
         except json.JSONDecodeError as exc:
-            raise ResolveError(f"{spec.url} is not valid JSON: {exc}") from exc
+            raise ResolveError(f"{url} is not valid JSON: {exc}") from exc
         if not isinstance(data, dict):
-            raise ResolveError(f"{spec.url} is not an object")
+            raise ResolveError(f"{url} is not an object")
     name = data.get("name") or "extension"
     version = data.get("version") or "0.1.0"
     release = data.get("release")
     if not isinstance(release, dict):
-        raise ResolveError(f"manifest at {spec.url} has no 'release' entry")
+        raise ResolveError(f"manifest at {url} has no 'release' entry")
     try:
         return asset_download_url(ReleaseSpec.from_data(release), str(name), str(version))
     except Exception as exc:
