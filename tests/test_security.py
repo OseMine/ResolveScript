@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ResolveScript.fetch import FetchError, _SafeRedirectHandler, _assert_public_host, fetch
+from ResolveScript.fetch import FetchError, _assert_public_host, _SafeRedirectHandler, fetch
 from ResolveScript.manifest.model import ManifestError
 from ResolveScript.manifest.xml_reader import loads as xml_loads
 from ResolveScript.resolver import _slug

@@ -170,7 +170,7 @@ def _slug(url: str) -> str:
         tail = unquote(url.rsplit("/", 1)[-1])
         if tail and tail not in (".", ".."):
             cleaned = _UNSAFE_SLUG_CHARS.sub("_", tail)
-            if cleaned and cleaned not in (".", ".."):
+            if cleaned and ".." not in cleaned.split("_"):
                 return cleaned
     return hashlib.sha256(url.encode()).hexdigest()[:16] + ".tgz"
 
