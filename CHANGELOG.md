@@ -50,7 +50,7 @@ All notable changes to this project are documented here.
   the shared `pypi-publish` action; AI security gate + release notes wired
   through `release-all` (`provider: opencode`, `auto-free` model).
 
-## 0.1.0 - unreleased
+## 0.1.0 - 2026-09-27
 
 ### Added
 

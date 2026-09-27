@@ -35,7 +35,7 @@ def test_scaffold_json_project(tmp_path) -> None:
     root, written = scaffold_project("my_tool", destination=tmp_path)
     assert (root / "manifest.json").exists()
     assert (root / "my_tool" / "__init__.py").is_file()
-    assert (root / "my_tool.py").is_file()
+    assert (root / "my_tool_main.py").is_file()
     assert (root / "tests" / "test_smoke.py").is_file()
     assert not (root / "manifest.xml").exists()
     assert "manifest.json" in {str(p) for p in written}

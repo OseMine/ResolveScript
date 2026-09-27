@@ -25,7 +25,7 @@ def test_package_scaffold(tmp_path) -> None:
     with tarfile.open(result.archive) as tf:
         names = tf.getnames()
     assert "manifest.json" in names
-    assert "hello.py" in names
+    assert "hello_main.py" in names
     assert "hello/__init__.py" in names
     assert "hello/menu.py" in names
 

@@ -48,11 +48,14 @@ FUNCTION_EXPORTS = {
     "get_extension", "install_package", "install_project", "read_registry",
     "registry_path", "remove_entry", "resolve_scripts_root", "select_files",
     "target_dir", "uninstall_package", "write_registry",
+    # plugins
+    "discover_plugins", "install_plugin", "list_plugins", "load_plugin_module",
+    "register_plugin_commands", "uninstall_plugin",
 }
 
 CLASS_EXPORTS = {
     # manifest
-    "Compat", "ConsolidateConfig", "InstallConfig", "Manifest",
+    "Compat", "ConsolidateConfig", "ExtensionConfig", "InstallConfig", "Manifest",
     "ManifestError", "Release", "Target",
     # sources
     "ArchiveError", "GitSourceError", "ReleaseError", "ReleaseSpec",
@@ -74,6 +77,8 @@ CLASS_EXPORTS = {
     # install
     "InstallError", "InstallOptions", "InstallResult", "InstalledFile",
     "RegistryError",
+    # plugins
+    "PluginEntry", "PluginError", "PluginManifest", "PluginRegistry", "RequiresConfig",
 }
 
 
@@ -107,7 +112,7 @@ def test_exported_classes_are_classes() -> None:
 
 
 def test_version() -> None:
-    assert rs.__version__ == "0.1.4-alpha"
+    assert rs.__version__ == "0.1.0"
     assert rs.get_version() == rs.__version__
 
 

@@ -25,7 +25,7 @@ Install with pip: `pip install resolvescript` (Python 3.12+).
 
 | Aspect          | Specification                     |
 | --------------- | --------------------------------- |
-| Current version | v0.1.4-alpha                      |
+| Current version | v0.1.0                            |
 | Resolve support | DaVinci Resolve Free & Studio 18+ |
 | License         | MIT                               |
 

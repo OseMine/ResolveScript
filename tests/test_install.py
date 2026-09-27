@@ -193,7 +193,7 @@ def test_install_project_directory_layout(tmp_path, scripts_root) -> None:
 
     target = scripts_root / "Comp" / "demo"
     assert (target / "manifest.json").is_file()
-    assert (target / "demo.py").is_file()
+    assert (target / "demo_main.py").is_file()
     assert (target / "demo" / "__init__.py").is_file()
     assert result.container == target
 
