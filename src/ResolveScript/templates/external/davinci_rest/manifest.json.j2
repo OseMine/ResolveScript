@@ -1,0 +1,26 @@
+{
+  "name": "@NAME@",
+  "version": "@VERSION@",
+  "author": "@AUTHOR@",
+  "description": "@DESCRIPTION@",
+  "python": "@NAME@",
+  "targets": [
+    "Comp",
+    "Utility"
+  ],
+  "consolidate": {
+    "enabled": true,
+    "output": "@NAME@.py",
+    "entry": "@NAME@/__init__.py",
+    "exclude": ["tests"],
+    "no_comment": ["sys", "os"]
+  },
+  "install": {
+    "as_directory": true,
+    "include": ["@NAME@_main.py", "@NAME@/**", "manifest.json"],
+    "exclude": ["**/__pycache__/**"]
+  },
+  "dependencies": [
+    "davinci-rest>=0.2.5"
+  ]
+}

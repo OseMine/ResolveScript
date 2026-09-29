@@ -1,0 +1,51 @@
+name: "ResolveScript Build Installable"
+description: "Build a Lua installer (.lua) that can be dragged into Fusion Console"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Project directory"
+    required: false
+    default: "."
+  output:
+    description: "Output path for installer"
+    required: false
+  installer-template:
+    description: "Custom installer template path"
+    required: false
+  target-category:
+    description: "Scripts menu category (Scripts/Utility, Scripts/Comp, etc.)"
+    required: false
+    default: "Scripts/Utility"
+  overwrite:
+    description: "Default overwrite behavior"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup ResolveScript
+      uses: ./.github/actions/setup-resolvescript
+
+    - name: Build Lua installer
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        cmd="resolvescript build --installable"
+        if [[ -n "${{ inputs.output }}" ]]; then
+          cmd="$cmd --output '${{ inputs.output }}'"
+        fi
+        if [[ -n "${{ inputs.installer-template }}" ]]; then
+          cmd="$cmd --installer-template '${{ inputs.installer-template }}'"
+        fi
+        echo "Running: $cmd"
+        eval $cmd
+
+    - name: Upload installer
+      if: inputs.output != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: lua-installer
+        path: ${{ inputs.project-dir }}/${{ inputs.output }}
+        retention-days: 30

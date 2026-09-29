@@ -1,0 +1,28 @@
+name: "ResolveScript Consolidate"
+description: "Merge a package directory into a single .py file (no manifest needed)"
+author: "ResolveScript"
+
+inputs:
+  package-dir:
+    description: "Package directory to consolidate"
+    required: true
+  output:
+    description: "Output file path for consolidated script"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Consolidate package
+      shell: bash
+      run: |
+        cmd="resolvescript consolidate '${{ inputs.package-dir }}' --output '${{ inputs.output }}'"
+        echo "Running: $cmd"
+        eval $cmd
+
+    - name: Upload consolidated script
+      uses: actions/upload-artifact@v4
+      with:
+        name: resolvescript-consolidated
+        path: ${{ inputs.output }}
+        retention-days: 7

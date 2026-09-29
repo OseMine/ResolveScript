@@ -1,0 +1,85 @@
+name: "ResolveScript Security Scan"
+description: "Run security checks on dependencies and code"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Project directory"
+    required: false
+    default: "."
+  fail-on-critical:
+    description: "Fail build on critical vulnerabilities"
+    required: false
+    default: "true"
+  fail-on-high:
+    description: "Fail build on high vulnerabilities"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup ResolveScript
+      uses: ./.github/actions/setup-resolvescript
+
+    - name: Install security tools
+      shell: bash
+      run: |
+        pip install pip-audit safety bandit
+
+    - name: Run pip-audit (dependency vulnerabilities)
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        pip-audit --format=json --output=pip-audit.json || true
+        pip-audit --desc --format=text
+
+    - name: Run safety (dependency vulnerabilities)
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        safety check --json --output=safety.json || true
+        safety check
+
+    - name: Run bandit (code security)
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        bandit -r . -f json -o bandit.json || true
+        bandit -r . -f txt
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: |
+          ${{ inputs.project-dir }}/pip-audit.json
+          ${{ inputs.project-dir }}/safety.json
+          ${{ inputs.project-dir }}/bandit.json
+        retention-days: 30
+
+    - name: Check for critical vulnerabilities
+      if: inputs.fail-on-critical == 'true'
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        if [[ -f pip-audit.json ]]; then
+          critical=$(jq '[.vulnerabilities[] | select(.severity == "critical")] | length' pip-audit.json)
+          if [[ $critical -gt 0 ]]; then
+            echo "::error::Found $critical critical vulnerabilities"
+            exit 1
+          fi
+        fi
+
+    - name: Check for high vulnerabilities
+      if: inputs.fail-on-high == 'true'
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        if [[ -f pip-audit.json ]]; then
+          high=$(jq '[.vulnerabilities[] | select(.severity == "high")] | length' pip-audit.json)
+          if [[ $high -gt 0 ]]; then
+            echo "::error::Found $high high vulnerabilities"
+            exit 1
+          fi
+        fi

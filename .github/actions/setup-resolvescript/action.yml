@@ -1,0 +1,44 @@
+name: "Setup ResolveScript"
+description: "Install ResolveScript and its dependencies"
+author: "ResolveScript"
+
+inputs:
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.9"
+  resolvescript-version:
+    description: "ResolveScript version to install (or 'latest', 'dev' for main branch)"
+    required: false
+    default: "latest"
+  cache-key-suffix:
+    description: "Suffix for cache key to allow cache invalidation"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: 'pip'
+        cache-key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}-${{ inputs.cache-key-suffix }}
+
+    - name: Install ResolveScript
+      shell: bash
+      run: |
+        if [[ "${{ inputs.resolvescript-version }}" == "dev" ]]; then
+          pip install -e "git+https://github.com/resolvescript/resolvescript.git@main#egg=ResolveScript"
+        elif [[ "${{ inputs.resolvescript-version }}" == "latest" ]]; then
+          pip install ResolveScript
+        else
+          pip install "ResolveScript==${{ inputs.resolvescript-version }}"
+        fi
+
+    - name: Verify installation
+      shell: bash
+      run: |
+        resolvescript --version
+        resolvescript --help

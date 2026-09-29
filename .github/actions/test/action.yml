@@ -1,0 +1,44 @@
+name: "ResolveScript Test"
+description: "Run a ResolveScript project's test suite against the mock API"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Directory containing the project"
+    required: false
+    default: "."
+  test-args:
+    description: "Additional arguments to pass to pytest"
+    required: false
+    default: "-q"
+  coverage:
+    description: "Generate coverage report"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run tests
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        cmd="resolvescript test ${{ inputs.test-args }}"
+        echo "Running: $cmd"
+        eval $cmd
+
+    - name: Generate coverage report
+      if: inputs.coverage == 'true'
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        pip install pytest-cov
+        python -m pytest --cov=. --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage
+      if: inputs.coverage == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-${{ inputs.project-dir }}
+        path: ${{ inputs.project-dir }}/coverage.xml
+        retention-days: 7

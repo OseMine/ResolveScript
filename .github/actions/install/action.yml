@@ -1,0 +1,47 @@
+name: "ResolveScript Install"
+description: "Install a ResolveScript package into the Resolve Scripts directory"
+author: "ResolveScript"
+
+inputs:
+  spec:
+    description: "Package specifier (name, owner/repo, github:, URL, archive, file:, ./dir)"
+    required: false
+  scripts-root:
+    description: "Override OS-detected Scripts root"
+    required: false
+  target:
+    description: "Override install target category (Comp, Utility, Tool, Render, ...)"
+    required: false
+  dry-run:
+    description: "Show what would change without writing"
+    required: false
+    default: "false"
+  locked:
+    description: "Fail if recorded artifacts no longer satisfy ranges"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install package
+      shell: bash
+      run: |
+        cmd="resolvescript install"
+        if [[ -n "${{ inputs.spec }}" ]]; then
+          cmd="$cmd '${{ inputs.spec }}'"
+        fi
+        if [[ -n "${{ inputs.scripts-root }}" ]]; then
+          cmd="$cmd --scripts-root '${{ inputs.scripts-root }}'"
+        fi
+        if [[ -n "${{ inputs.target }}" ]]; then
+          cmd="$cmd --target '${{ inputs.target }}'"
+        fi
+        if [[ "${{ inputs.dry-run }}" == "true" ]]; then
+          cmd="$cmd --dry-run"
+        fi
+        if [[ "${{ inputs.locked }}" == "true" ]]; then
+          cmd="$cmd --locked"
+        fi
+        echo "Running: $cmd"
+        eval $cmd

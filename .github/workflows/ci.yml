@@ -1,31 +1,38 @@
-# Thin CI workflow — copy into any project. Set `language` (or a repo
-# variable `CI_LANGUAGE`) and done. All lint/check/test logic lives in the
-# shared `ci` action and updates automatically at @v2.
+# Example CI workflow using ResolveScript composite actions
+# Copy this to your project's .github/workflows/ci.yml
+
 name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, develop]
   pull_request:
-  workflow_dispatch:
+    branches: [main, develop]
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   ci:
-    name: CI
+    name: ResolveScript CI (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
 
-      - uses: OseMine/workflows/.github/actions/ci@v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ResolveScript CI
+        uses: ./.github/actions/ci
         with:
-          language: python
+          project-dir: "."
+          python-version: ${{ matrix.python-version }}
+          resolvescript-version: "latest"
+          run-build: true
+          run-test: true
+          run-analyze: true
+          run-package: false
+          test-args: "-q --tb=short"

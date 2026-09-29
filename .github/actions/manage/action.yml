@@ -1,0 +1,22 @@
+name: "ResolveScript Manage"
+description: "Low-level install registry operations"
+author: "ResolveScript"
+
+inputs:
+  subcommand:
+    description: "Registry subcommand (list, show, add, remove, clear, migrate)"
+    required: true
+  args:
+    description: "Additional arguments for the subcommand"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run manage command
+      shell: bash
+      run: |
+        cmd="resolvescript manage ${{ inputs.subcommand }} ${{ inputs.args }}"
+        echo "Running: $cmd"
+        eval $cmd

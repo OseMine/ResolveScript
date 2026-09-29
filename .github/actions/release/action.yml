@@ -1,0 +1,96 @@
+name: "ResolveScript Release"
+description: "Create a GitHub Release with all artifacts"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Project directory"
+    required: false
+    default: "."
+  version:
+    description: "Version to release (e.g., v1.0.0)"
+    required: true
+  tag-prefix:
+    description: "Tag prefix"
+    required: false
+    default: "v"
+  draft:
+    description: "Create as draft release"
+    required: false
+    default: "false"
+  prerelease:
+    description: "Mark as prerelease"
+    required: false
+    default: "false"
+  generate-notes:
+    description: "Auto-generate release notes"
+    required: false
+    default: "true"
+  files:
+    description: "Glob pattern for release files"
+    required: false
+    default: "dist/*"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup ResolveScript
+      uses: ./.github/actions/setup-resolvescript
+
+    - name: Verify version matches tag
+      shell: bash
+      run: |
+        TAG="${{ inputs.version }}"
+        if [[ ! "$TAG" =~ ^${{ inputs.tag-prefix }}[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+          echo "::error::Version must match pattern ${{ inputs.tag-prefix }}x.y.z"
+          exit 1
+        fi
+
+    - name: Build
+      uses: ./.github/actions/build
+      with:
+        project-dir: ${{ inputs.project-dir }}
+
+    - name: Test
+      uses: ./.github/actions/test
+      with:
+        project-dir: ${{ inputs.project-dir }}
+
+    - name: Analyze
+      uses: ./.github/actions/analyze
+      with:
+        project-dir: ${{ inputs.project-dir }}
+
+    - name: Package
+      uses: ./.github/actions/package
+      with:
+        project-dir: ${{ inputs.project-dir }}
+
+    - name: Security scan
+      uses: ./.github/actions/security-scan
+      with:
+        project-dir: ${{ inputs.project-dir }}
+        fail-on-critical: true
+
+    - name: Dependency check
+      uses: ./.github/actions/dependency-check
+      with:
+        project-dir: ${{ inputs.project-dir }}
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ inputs.version }}
+        name: Release ${{ inputs.version }}
+        files: ${{ inputs.project-dir }}/${{ inputs.files }}
+        draft: ${{ inputs.draft }}
+        prerelease: ${{ inputs.prerelease }}
+        generate_release_notes: ${{ inputs.generate-notes }}
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

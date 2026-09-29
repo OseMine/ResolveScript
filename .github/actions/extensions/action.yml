@@ -1,0 +1,22 @@
+name: "ResolveScript Extensions"
+description: "Manage ResolveScript framework extensions (plugins)"
+author: "ResolveScript"
+
+inputs:
+  subcommand:
+    description: "Extensions subcommand (list, install, uninstall, enable, disable, info)"
+    required: true
+  args:
+    description: "Additional arguments for the subcommand"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run extensions command
+      shell: bash
+      run: |
+        cmd="resolvescript extensions ${{ inputs.subcommand }} ${{ inputs.args }}"
+        echo "Running: $cmd"
+        eval $cmd

@@ -1,0 +1,22 @@
+[project]
+name = "@NAME@"
+version = "@VERSION@"
+description = "@DESCRIPTION@"
+readme = "README.md"
+authors = [{name = "@AUTHOR@"}] if "@AUTHOR@" else []
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["@NAME@*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+norecursedirs = ["*.egg-info", ".git", "__pycache__", "dist", "build"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["dist", "build"]

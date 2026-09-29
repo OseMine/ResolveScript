@@ -1,128 +1,66 @@
-# Thin release workflow - copy into any project, set `language` + optional
-# `build` flags. Everything (meta/semver, builds, security gate, AI release
-# notes, release + SHA256SUMS) lives in the shared `release-all` action.
-#
-# -- Pin vs rolling tag policy --------------------------------------
-#   @v2      stable - receives non-breaking fixes; recommended for production
-#   @latest  rolling - latest published state; friendly to new features
-#   @main    branch head - bleeding edge; only for testing
-#
-# Primary trigger: workflow_dispatch (Actions tab -> Run workflow).
-# Version is auto-detected from pubspec.yaml / Cargo.toml / package.json, or
-# overridden via the `version` input. Tag push (`v*`) remains supported as a
-# secondary trigger.
+# Example Release workflow using ResolveScript composite actions
+# Copy this to your project's .github/workflows/release.yml
+
 name: Release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 1.2.3). Empty = auto-detect from project files"
-        required: false
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
         type: string
-      version-file:
-        description: "File to detect version from (e.g. pyproject.toml). Empty = auto-detect from project files"
-        default: "pyproject.toml"
-        required: false
-        type: string
-      prerelease:
-        description: "Mark as prerelease"
-        required: false
-        type: boolean
-        default: false
-      draft:
-        description: "Create as draft"
-        required: false
-        type: boolean
-        default: false
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: write
-  id-token: write
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  packages: write
 
 jobs:
   release:
-    name: Release
+    name: Create Release
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Resolve release tag
-        id: release-version
-        env:
-          REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
-          VERSION_FILE: ${{ github.event.inputs.version-file || 'pyproject.toml' }}
-          PUSH_TAG: ${{ github.ref_name || '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ -n "$REQUESTED_VERSION" ]]; then
-            version="$REQUESTED_VERSION"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && -n "$PUSH_TAG" ]]; then
-            version="$PUSH_TAG"
-          else
-            version="$(python - "$VERSION_FILE" <<'PY'
-          import json
-          import sys
-          import tomllib
-          from pathlib import Path
-
-          path = Path(sys.argv[1])
-          data = tomllib.loads(path.read_text(encoding="utf-8")) if path.suffix == ".toml" else json.loads(path.read_text(encoding="utf-8"))
-          version = data.get("project", {}).get("version") or data.get("version")
-          if not version:
-              raise SystemExit(f"Could not detect a version from {path}")
-          print(version)
-          PY
-            )"
-          fi
-
-          version="${version#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid semver version '$version' (expected X.Y.Z)" >&2
-            exit 1
-          fi
-
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          echo "Resolved release tag: v$version"
-
-      - uses: OseMine/workflows/.github/actions/release-all@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28
+      - name: Setup ResolveScript
+        uses: ./.github/actions/setup-resolvescript
         with:
-          language: python            # auto | rust | tauri | node | python | flutter | kmp | c | cpp | csharp | maven | gradle
-          build: python
-          release-tag: ${{ steps.release-version.outputs.tag }}
-          min-rating: "7"             # security gate 0-10; 0 disables
-          draft: ${{ github.event.inputs.draft || 'false' }}
-          prerelease: ${{ github.event.inputs.prerelease || 'false' }}
+          python-version: "3.9"
+          resolvescript-version: "latest"
 
-          # -- AI provider for the SECURITY GATE --------------------
-          provider: opencode
-          model: auto-free
-          api-key: ${{ secrets.OPENCODE_API_KEY }}
-          fallback-provider: opencode
-          fallback-model: auto-free
-          fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
+      - name: Analyze
+        uses: ./.github/actions/analyze
+        with:
+          project-dir: "."
 
-          # -- AI provider for RELEASE NOTES (overrides above) -----
-          notes-mode: auto            # auto | file | ai-required
-          notes-file: CHANGELOG.md    # used only when AI fails (auto mode)
-          notes-provider: opencode
-          notes-model: auto-free
-          notes-api-key: ${{ secrets.OPENCODE_API_KEY }}
-          notes-fallback-provider: mistral
-          notes-fallback-model: auto-free
-          notes-fallback-api-key: ${{ secrets.MISTRAL_API_KEY }}
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          project-dir: "."
+          installable: false
 
-      - name: Publish to PyPI (trusted publishing)
-        if: success()
-        uses: OseMine/workflows/.github/actions/pypi-publish@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28
+      - name: Test
+        uses: ./.github/actions/test
+        with:
+          project-dir: "."
+          test-args: "-q --tb=short"
+
+      - name: Package
+        uses: ./.github/actions/package
+        with:
+          project-dir: "."
+          dist-dir: "dist"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

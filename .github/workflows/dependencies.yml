@@ -1,0 +1,66 @@
+# Dependency check workflow
+# Runs weekly to report outdated dependencies
+
+name: Dependency Check
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly Monday 9 AM UTC
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deps:
+    name: Dependency Check (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run dependency check
+        uses: ./.github/actions/dependency-check
+        with:
+          project-dir: "."
+          check-outdated: true
+          check-licenses: true
+          allowed-licenses: "MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Python-2.0"
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Find the artifact
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            
+            const licenseArtifact = artifacts.data.artifacts.find(a => a.name === 'license-report');
+            if (licenseArtifact) {
+              const download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: licenseArtifact.id,
+                archive_format: 'zip'
+              });
+              
+              // Parse and comment
+              // Note: This would need actual implementation
+              console.log('License report artifact found');
+            }

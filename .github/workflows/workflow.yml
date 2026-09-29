@@ -1,0 +1,86 @@
+# Example Workflow Integration CI workflow
+# Copy this to your workflow integration project's .github/workflows/workflow.yml
+
+name: Workflow Integration CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  workflow:
+    name: Workflow Integration (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ResolveScript
+        uses: ./.github/actions/setup-resolvescript
+        with:
+          python-version: ${{ matrix.python-version }}
+          resolvescript-version: "latest"
+
+      - name: Build Workflow Integration
+        uses: ./.github/actions/workflow
+        with:
+          subcommand: "build"
+          project-dir: "."
+          script-only: true  # Skip Electron for CI
+
+      - name: Test
+        uses: ./.github/actions/test
+        with:
+          project-dir: "."
+          test-args: "-q --tb=short"
+
+      - name: Upload Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-${{ matrix.python-version }}
+          path: dist/*
+          retention-days: 30
+
+  # Full build with Electron (runs on specific schedule or manual)
+  workflow-electron:
+    name: Workflow Integration (with Electron)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ResolveScript
+        uses: ./.github/actions/setup-resolvescript
+        with:
+          python-version: "3.9"
+          resolvescript-version: "latest"
+
+      - name: Install Electron dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 libcairo2 libatspi2.0-0
+
+      - name: Build Workflow Integration (with Electron)
+        uses: ./.github/actions/workflow
+        with:
+          subcommand: "build"
+          project-dir: "."
+          script-only: false
+
+      - name: Upload Electron Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-electron
+          path: dist/*
+          retention-days: 30

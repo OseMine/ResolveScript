@@ -1,45 +1,44 @@
-# Thin security gate - copy into any project, wire OpenAI/Puter/VirusTotal
-# secrets, done. Trivy + cargo/npm/pip audit + VirusTotal scan + AI review,
-# rating 0-10, fails the run below min-rating.
-name: Security
+# Security scanning workflow
+# Runs daily and on PR to catch vulnerabilities early
+
+name: Security Scan
 
 on:
-  pull_request:
-  workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1" # Monday 06:00 UTC
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: security-${{ github.ref }}
-  cancel-in-progress: true
+  security-events: write
 
 jobs:
   security:
-    name: Security gate
+    name: Security Scan (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: OseMine/workflows/.github/actions/build@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28 # v2
+      - name: Run security scan
+        uses: ./.github/actions/security-scan
         with:
-          language: python
-          build: python
-          output-dir: dist
+          project-dir: "."
+          fail-on-critical: true
+          fail-on-high: false
 
-      - uses: OseMine/workflows/.github/actions/security@bc8c4cd87e4dc0f0c4ba0dca63bdd44aa48f2f28 # v2
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          min-rating: "7"
-          provider: opencode
-          model: auto-free
-          api-key: ${{ secrets.OPENCODE_API_KEY }}
-          fallback-provider: opencode
-          fallback-model: auto-free
-          fallback-api-key: ${{ secrets.OPENCODE_API_KEY }}
-          virustotal-api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          virustotal-files: "dist/*"
+          sarif_file: pip-audit.json
+          category: pip-audit

@@ -1,0 +1,79 @@
+# Example Fuse CI workflow using ResolveScript composite actions
+# Copy this to your fuse project's .github/workflows/fuse.yml
+
+name: Fuse CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  fuse:
+    name: Fuse (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ResolveScript
+        uses: ./.github/actions/setup-resolvescript
+        with:
+          python-version: ${{ matrix.python-version }}
+          resolvescript-version: "latest"
+
+      - name: Build Fuse
+        uses: ./.github/actions/fuse
+        with:
+          subcommand: "build"
+          project-dir: "."
+          no-check: false
+
+      - name: Test Fuse
+        uses: ./.github/actions/fuse
+        with:
+          subcommand: "describe"
+          project-dir: "."
+
+      - name: Package Fuse
+        uses: ./.github/actions/fuse
+        with:
+          subcommand: "package"
+          project-dir: "."
+          dist: "dist"
+          no-check: false
+
+      - name: Upload Fuse Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuse-${{ matrix.python-version }}
+          path: dist/*
+          retention-days: 30
+
+  # Install test (requires Windows/macOS runner with Fusion/Resolve)
+  # fuse-install-test:
+  #   name: Fuse Install Test
+  #   runs-on: windows-latest
+  #   needs: fuse
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Setup ResolveScript
+  #       uses: ./.github/actions/setup-resolvescript
+  #       with:
+  #         python-version: "3.9"
+  #     - name: Install Fuse (dry-run)
+  #       uses: ./.github/actions/fuse
+  #       with:
+  #         subcommand: "install"
+  #         project-dir: "."
+  #         dry-run: true

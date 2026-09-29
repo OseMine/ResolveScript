@@ -1,0 +1,28 @@
+name: "ResolveScript Analyze"
+description: "Run static analysis checks on a ResolveScript project"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Directory containing the project"
+    required: false
+    default: "."
+  json-output:
+    description: "Output results as JSON"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run analyze
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        cmd="resolvescript analyze"
+        if [[ "${{ inputs.json-output }}" == "true" ]]; then
+          cmd="$cmd --json"
+        fi
+        echo "Running: $cmd"
+        eval $cmd
+      continue-on-error: true
