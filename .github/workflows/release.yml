@@ -57,6 +57,12 @@ jobs:
         env:
           SETUPTOOLS_USE_DISTUTILS: stdlib
 
+      - name: Verify CLI commands
+        run: |
+          resolvescript --help | grep -E 'fuse|plugin'
+          resolvescript fuse --help
+          resolvescript plugin --help
+
       - name: Lint
         run: ruff check src tests
 
