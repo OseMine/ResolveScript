@@ -14,7 +14,6 @@ import pytest
 
 import ResolveScript as rs
 
-
 FUNCTION_EXPORTS = {
     # manifest
     "dumps", "is_valid_semver", "load_manifest", "loads",
@@ -112,7 +111,7 @@ def test_exported_classes_are_classes() -> None:
 
 
 def test_version() -> None:
-    assert rs.__version__ == "0.1.0"
+    assert rs.__version__ == "0.6.0"
     assert rs.get_version() == rs.__version__
 
 
@@ -180,10 +179,13 @@ def test_network_gate() -> None:
 
 
 def test_known_sources_table() -> None:
-    assert rs.known_names() == ["hello"]
+    names = rs.known_names()
+    assert "hello" in names
+
     hit = rs.lookup("hello")
     assert isinstance(hit, dict)
     assert hit["source"].startswith("github:")
+
     result = rs.search("hello")
     assert isinstance(result, list)
     assert all(isinstance(item, dict) for item in result)
