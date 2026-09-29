@@ -54,17 +54,38 @@ def _walk_templates(root: Path) -> Iterator[Path]:
 
 
 def build_values(name: str, **overrides: str) -> dict[str, str]:
+    label = name.replace("_", " ").strip()
+    slug = re.sub(r"[^a-z0-9]+", "", name.lower())
     values = {
         "NAME": name,
         "VERSION": DEFAULT_VERSION,
         "DESCRIPTION": f"{name} — a DaVinci Resolve script built with ResolveScript",
         "AUTHOR": "",
         "RESOLVESCRIPT_VERSION": __version__,
+        # Reverse-DNS id, for the things that need one (a Workflow Integration
+        # becomes a plugin folder named after it) — and a readable form of the
+        # name, since a package identifier is not a menu label.
+        "ID": f"com.resolvescript.{slug}" if slug else "com.resolvescript.integration",
+        "NAME_LABEL": label.title() if label else name,
     }
     for key, value in overrides.items():
         if value is not None:
             values[key.upper()] = value
     return values
+
+
+def _fusion_values(name: str) -> dict[str, str]:
+    """The extra substitutions a fuse template needs.
+
+    A fuse's identity is a Lua identifier (``FuRegisterClass``) and a
+    three-letter registry search code — neither of which can be derived from a
+    Python project name without guessing, and both of which Fusion stores
+    permanently, so a wrong guess is baked into every composition that uses the
+    tool.
+    """
+    words = [part for part in re.split(r"[^A-Za-z0-9]+", name) if part]
+    class_name = "".join(word[:1].upper() + word[1:] for word in words) or "Fuse"
+    return {"CLASS_NAME": class_name, "ICON": (class_name[:3] or "Fus").capitalize()}
 
 
 def scaffold_project(
@@ -79,10 +100,31 @@ def scaffold_project(
     """Create a new extension project.
 
     Returns ``(project_root, written_relative_paths)``.
+
+    Available templates:
+    - minimal: Basic Python script project
+    - pydavinci: Project using pydavinci wrapper (type hints, autocomplete)
+    - davinci-rest: Project using davinci-rest REST client
+    - lua: Lua script project
+    - workflow: DaVinci Resolve Workflow Integration
+    - fuse: Fusion fuse (a scripted .fuse plugin)
     """
     pkg_name = normalize_name(name)
-    if template != "minimal":
-        raise ScaffoldError(f"unknown template '{template}' (available: minimal)")
+
+    # Map template to its directory
+    template_map = {
+        "minimal": "extension",
+        "pydavinci": "external/pydavinci",
+        "davinci-rest": "external/davinci_rest",
+        "lua": "lua",
+        "workflow": "workflow",
+        "fuse": "fuse",
+    }
+
+    if template not in template_map:
+        raise ScaffoldError(f"unknown template '{template}' (available: {', '.join(template_map.keys())})")
+
+    template_subdir = template_map[template]
 
     try:
         project_dir = (destination or Path.cwd()) / name
@@ -96,34 +138,40 @@ def scaffold_project(
             raise ScaffoldError(f"destination {project_dir} already exists and is not empty")
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    template_root = TEMPLATES_DIR / "extension"
+    template_root = TEMPLATES_DIR / template_subdir
     if not template_root.is_dir():
         raise ScaffoldError(f"template tree missing at {template_root}")
 
-    selected_manifest = f"manifest.{fmt}.j2"
-    if fmt not in {"json", "xml"}:
-        raise ScaffoldError(f"unknown manifest format '{fmt}' (json|xml)")
-
-    # Render pyproject.toml.j2 to pyproject.toml
-    pyproject_rendered = False
+    # Lua, workflow and fuse templates don't have JSON/XML manifest variants:
+    # the first has no manifest at all, and the other two carry a block the XML
+    # reader does not model.
+    if template in ("lua", "workflow", "fuse"):
+        selected_manifest = "manifest.json.j2"
+    else:
+        selected_manifest = f"manifest.{fmt}.j2"
+        if fmt not in {"json", "xml"}:
+            raise ScaffoldError(f"unknown manifest format '{fmt}' (json|xml)")
 
     values = build_values(
         pkg_name,
         description=description,
         author=author,
+        **_fusion_values(pkg_name),
     )
 
     written: list[str] = []
     for src in _walk_templates(template_root):
         rel = src.relative_to(template_root)
+
+        # Handle manifest selection
         if rel.name == selected_manifest:
-            rel = Path("manifest." + fmt)
+            rel = Path("manifest." + ("json" if template in ("lua", "workflow", "fuse") else fmt))
         elif rel.name.startswith("manifest.") and rel.suffix == ".j2":
             continue  # the unselected manifest variant is not emitted
-        elif rel.name == "pyproject.toml.j2":
-            # Render pyproject.toml with conditional author field
+
+        # Handle pyproject.toml for Python templates
+        elif template != "lua" and rel.name == "pyproject.toml.j2":
             rel = Path("pyproject.toml")
-            pyproject_rendered = True
             content = src.read_text(encoding="utf-8")
             # Handle conditional author array
             if author:
@@ -142,6 +190,7 @@ def scaffold_project(
             target.write_text(render(content, values), encoding="utf-8")
             written.append(str(target.relative_to(project_dir)))
             continue
+
         rel_text = render(str(rel), values)
         target = project_dir / rel_text
         target.parent.mkdir(parents=True, exist_ok=True)
