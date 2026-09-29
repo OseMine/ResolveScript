@@ -1,0 +1,47 @@
+name: "ResolveScript Build"
+description: "Consolidate a multi-file ResolveScript package into a single file"
+author: "ResolveScript"
+
+inputs:
+  project-dir:
+    description: "Directory containing the project (with manifest.json/manifest.xml)"
+    required: false
+    default: "."
+  output:
+    description: "Output path for consolidated file"
+    required: false
+  installable:
+    description: "Generate a Lua installer instead of Python file"
+    required: false
+    default: "false"
+  installer-template:
+    description: "Path to custom installer template"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build project
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        cmd="resolvescript build"
+        if [[ -n "${{ inputs.output }}" ]]; then
+          cmd="$cmd --output '${{ inputs.output }}'"
+        fi
+        if [[ "${{ inputs.installable }}" == "true" ]]; then
+          cmd="$cmd --installable"
+        fi
+        if [[ -n "${{ inputs.installer-template }}" ]]; then
+          cmd="$cmd --installer-template '${{ inputs.installer-template }}'"
+        fi
+        echo "Running: $cmd"
+        eval $cmd
+
+    - name: Upload build artifact
+      if: inputs.output != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: resolvescript-build-${{ inputs.project-dir }}
+        path: ${{ inputs.project-dir }}/${{ inputs.output }}
+        retention-days: 7
