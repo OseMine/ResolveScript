@@ -76,7 +76,12 @@ jobs:
 
       - name: Analyze
         if: hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''
-        run: resolvescript analyze
+        run: |
+          if [ -f manifest.json ] || [ -f manifest.xml ]; then
+            resolvescript analyze
+          else
+            echo "No manifest at root, skipping analyze"
+          fi
 
       - name: Build
         run: resolvescript build
