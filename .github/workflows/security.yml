@@ -36,9 +36,5 @@ jobs:
           fail-on-critical: true
           fail-on-high: false
 
-      - name: Upload SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: pip-audit.json
-          category: pip-audit
+      # Security reports uploaded as artifacts by security-scan action
+      # pip-audit JSON is not valid SARIF, so we skip SARIF upload
