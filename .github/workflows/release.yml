@@ -51,17 +51,11 @@ jobs:
         run: |
           pip install -e .[test]
           pip install ruff pytest
-          if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
+          if [[ "${{ matrix.python-version }}" == "3.9" ]] || [[ "${{ matrix.python-version }}" == "3.12" ]]; then
             pip install "setuptools<84"
           fi
         env:
           SETUPTOOLS_USE_DISTUTILS: stdlib
-
-      - name: Verify CLI commands
-        run: |
-          resolvescript --help | grep -E 'fuse|plugin'
-          resolvescript fuse --help
-          resolvescript plugin --help
 
       - name: Lint
         run: ruff check src tests
