@@ -49,11 +49,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[test]
-          pip install ruff pytest
           if [[ "${{ matrix.python-version }}" == "3.9" ]] || [[ "${{ matrix.python-version }}" == "3.12" ]]; then
             pip install "setuptools<84"
           fi
+          pip install -e .[test]
+          pip install ruff pytest
         env:
           SETUPTOOLS_USE_DISTUTILS: stdlib
 
