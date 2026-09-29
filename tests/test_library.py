@@ -91,6 +91,8 @@ CONSTANT_EXPORTS = {
     "ARCHIVE_SUFFIXES", "CONVENTIONS", "DEFAULT_PROJECT", "DEFAULT_VERSION",
     "FUSION_SCRIPT_MODULE", "KNOWN_ROOTS", "REGISTRY_REL", "SCHEMA_VERSION",
     "TARGET_SUGGESTIONS", "TEMPLATES_DIR", "WORKSPACE_FILE",
+    "ENV_ALLOW_REMOTE", "ENV_FUSES_ROOT", "ENV_FUSION_PLUGINS_ROOT",
+    "ENV_SCRIPTS_ROOT", "ENV_WORKFLOWS_ROOT",
 }
 
 
@@ -111,7 +113,7 @@ def test_exported_classes_are_classes() -> None:
 
 
 def test_version() -> None:
-    assert rs.__version__ == "0.6.0"
+    assert rs.__version__ == "1.0.0"
     assert rs.get_version() == rs.__version__
 
 
