@@ -242,9 +242,15 @@ jobs:
         run: pip install ResolveScript
 
       - name: Package
-        run: resolvescript package --dist dist
+        run: |
+          if [ -f manifest.json ] || [ -f manifest.xml ]; then
+            resolvescript package --dist dist
+          else
+            echo "No manifest at root, skipping package"
+          fi
 
       - name: Upload package
+        if: hashFiles('dist/*.zip') != ''
         uses: actions/upload-artifact@v4
         with:
           name: release-package
@@ -268,6 +274,7 @@ jobs:
           path: dist/
 
       - name: Create Release
+        if: hashFiles('dist/*.zip') != ''
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.validate.outputs.version }}
@@ -280,11 +287,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: No package to release
+        if: hashFiles('dist/*.zip') == ''
+        run: echo "No package artifact found, skipping release creation"
+
   # Optional: Publish to PyPI
   pypi-publish:
     name: Publish to PyPI
     needs: [release]
-    if: "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
+    if: "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && hashFiles('dist/*.zip') != ''"
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
