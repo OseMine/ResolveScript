@@ -58,6 +58,11 @@ from .analyze import KNOWN_ROOTS, Analysis, Issue, analyze_project, issues_to_js
 
 # --- config ------------------------------------------------------------
 from .config import (
+    ENV_ALLOW_REMOTE,
+    ENV_FUSES_ROOT,
+    ENV_FUSION_PLUGINS_ROOT,
+    ENV_SCRIPTS_ROOT,
+    ENV_WORKFLOWS_ROOT,
     allow_remote,
     is_editable_install,
     normalize_path,
@@ -324,6 +329,11 @@ __all__ = [
     "run_smoke",
     "start_repl",
     # config
+    "ENV_ALLOW_REMOTE",
+    "ENV_FUSES_ROOT",
+    "ENV_FUSION_PLUGINS_ROOT",
+    "ENV_SCRIPTS_ROOT",
+    "ENV_WORKFLOWS_ROOT",
     "allow_remote",
     "is_editable_install",
     "normalize_path",

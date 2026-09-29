@@ -7,7 +7,27 @@ import platform
 from pathlib import Path
 
 ENV_SCRIPTS_ROOT = "RESOLVESCRIPT_SCRIPTS_ROOT"
+ENV_WORKFLOWS_ROOT = "RESOLVESCRIPT_WORKFLOWS_ROOT"
+ENV_FUSES_ROOT = "RESOLVESCRIPT_FUSES_ROOT"
+ENV_FUSION_PLUGINS_ROOT = "RESOLVESCRIPT_FUSION_PLUGINS_ROOT"
 ENV_ALLOW_REMOTE = "RESOLVESCRIPT_ALLOW_REMOTE"
+
+__all__ = [
+    "ENV_SCRIPTS_ROOT",
+    "ENV_WORKFLOWS_ROOT",
+    "ENV_FUSES_ROOT",
+    "ENV_FUSION_PLUGINS_ROOT",
+    "ENV_ALLOW_REMOTE",
+    "PROG",
+    "resolve_env",
+    "user_config_dir",
+    "plugins_dir",
+    "scripts_root_override",
+    "allow_remote",
+    "normalize_path",
+    "is_editable_install",
+    "python_spec",
+]
 
 PROG = "resolvescript"
 
