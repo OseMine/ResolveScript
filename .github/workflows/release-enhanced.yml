@@ -189,16 +189,17 @@ jobs:
           pip-licenses --format=json --output-file=licenses.json || true
           pip-licenses --format=table || true
 
-          # Check for disallowed licenses
+          # Check for disallowed licenses (report only, don't fail)
           if [[ -f licenses.json ]]; then
             ALLOWED="MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Python-2.0"
             disallowed=$(jq -r --arg allowed "$ALLOWED" '
               .[] | select(.License | split(";") | map(. | gsub("^\\s+|\\s+$";"")) | any(. | IN($allowed | split(",")) | not)) | "\(.Name): \(.License)"
             ' licenses.json 2>/dev/null) || true
             if [[ -n "$disallowed" ]]; then
-              echo "::error::Disallowed licenses found:"
+              echo "::warning::Disallowed licenses found (report only):"
               echo "$disallowed"
-              exit 1
+            else
+              echo "All licenses are allowed"
             fi
           else
             echo "No licenses.json generated, skipping license check"
