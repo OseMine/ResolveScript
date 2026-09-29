@@ -272,6 +272,7 @@ jobs:
         with:
           name: release-package
           path: dist/
+          fail-on-error: false
 
       - name: Create Release
         if: hashFiles('dist/*.zip') != ''
