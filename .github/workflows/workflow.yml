@@ -16,7 +16,7 @@ jobs:
   workflow:
     name: Workflow Integration (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    if: hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''
+    if: "hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -58,7 +58,7 @@ jobs:
   workflow-electron:
     name: Workflow Integration (with Electron)
     runs-on: ubuntu-latest
-    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && (hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != '')
+    if: "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && (hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != '')"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

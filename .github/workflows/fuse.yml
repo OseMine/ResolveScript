@@ -16,7 +16,7 @@ jobs:
   fuse:
     name: Fuse (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    if: hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''
+    if: "hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''"
     runs-on: ubuntu-latest
     strategy:
       matrix:
