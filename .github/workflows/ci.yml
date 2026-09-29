@@ -25,14 +25,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run ResolveScript CI
-        uses: ./.github/actions/ci
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          project-dir: "."
           python-version: ${{ matrix.python-version }}
-          resolvescript-version: "latest"
-          run-build: true
-          run-test: true
-          run-analyze: true
-          run-package: false
-          test-args: "-q --tb=short"
+          cache: 'pip'
+          cache-dependency-path: |
+            **/requirements*.txt
+            **/pyproject.toml
+            **/setup.py
+            **/setup.cfg
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
+
+      - name: Analyze
+        run: resolvescript analyze
+
+      - name: Build
+        run: resolvescript build
+
+      - name: Test
+        run: resolvescript test -q --tb=short

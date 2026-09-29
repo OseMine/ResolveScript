@@ -25,35 +25,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup ResolveScript
-        uses: ./.github/actions/setup-resolvescript
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          resolvescript-version: "latest"
+          cache: 'pip'
+          cache-dependency-path: |
+            **/requirements*.txt
+            **/pyproject.toml
+            **/setup.py
+            **/setup.cfg
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
 
       - name: Build Fuse
-        uses: ./.github/actions/fuse
-        with:
-          subcommand: "build"
-          project-dir: "."
-          no-check: false
+        run: resolvescript fuse build
 
       - name: Test Fuse
-        uses: ./.github/actions/fuse
-        with:
-          subcommand: "describe"
-          project-dir: "."
+        run: resolvescript fuse describe
 
       - name: Package Fuse
-        uses: ./.github/actions/fuse
-        with:
-          subcommand: "package"
-          project-dir: "."
-          dist: "dist"
-          no-check: false
+        run: resolvescript fuse package
 
       - name: Upload Fuse Artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: fuse-${{ matrix.python-version }}
           path: dist/*

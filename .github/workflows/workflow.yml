@@ -25,27 +25,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup ResolveScript
-        uses: ./.github/actions/setup-resolvescript
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          resolvescript-version: "latest"
+          cache: 'pip'
+          cache-dependency-path: |
+            **/requirements*.txt
+            **/pyproject.toml
+            **/setup.py
+            **/setup.cfg
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
 
       - name: Build Workflow Integration
-        uses: ./.github/actions/workflow
-        with:
-          subcommand: "build"
-          project-dir: "."
-          script-only: true  # Skip Electron for CI
+        run: resolvescript workflow build --script-only
 
       - name: Test
-        uses: ./.github/actions/test
-        with:
-          project-dir: "."
-          test-args: "-q --tb=short"
+        run: resolvescript test -q --tb=short
 
       - name: Upload Workflow Artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: workflow-${{ matrix.python-version }}
           path: dist/*
@@ -60,11 +61,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup ResolveScript
-        uses: ./.github/actions/setup-resolvescript
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.9"
-          resolvescript-version: "latest"
+          cache: 'pip'
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
 
       - name: Install Electron dependencies
         run: |
@@ -72,14 +76,10 @@ jobs:
           sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 libcairo2 libatspi2.0-0
 
       - name: Build Workflow Integration (with Electron)
-        uses: ./.github/actions/workflow
-        with:
-          subcommand: "build"
-          project-dir: "."
-          script-only: false
+        run: resolvescript workflow build
 
       - name: Upload Electron Artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: workflow-electron
           path: dist/*

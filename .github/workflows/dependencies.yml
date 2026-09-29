@@ -28,13 +28,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run dependency check
-        uses: ./.github/actions/dependency-check
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          project-dir: "."
-          check-outdated: true
-          check-licenses: true
-          allowed-licenses: "MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Python-2.0"
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install check tools
+        run: pip install pipdeptree pip-licenses
+
+      - name: Check outdated packages
+        run: |
+          echo "## Outdated packages"
+          pip list --outdated --format=json | jq -r '.[] | "\(.name): \(.version) -> \(.latest_version)"' || true
+
+      - name: Check licenses
+        run: |
+          echo "## License report"
+          pip-licenses --format=json --output-file=licenses.json
+          pip-licenses --format=table
+
+          # Check for disallowed licenses
+          ALLOWED="MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Python-2.0"
+          disallowed=$(jq -r --arg allowed "$ALLOWED" '
+            .[] | select(.License | split(";") | map(. | gsub("^\\s+|\\s+$";"")) | any(. | IN($allowed | split(",")) | not)) | "\(.Name): \(.License)"
+          ' licenses.json)
+          if [[ -n "$disallowed" ]]; then
+            echo "::error::Disallowed licenses found:"
+            echo "$disallowed"
+            exit 1
+          fi
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 30
+
+      - name: Dependency tree
+        run: |
+          echo "## Dependency tree"
+          pipdeptree --json | jq -r '.[] | "\(.package.key): \(.package.installed_version)"' | head -50
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'

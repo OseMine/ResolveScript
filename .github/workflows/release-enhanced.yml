@@ -60,28 +60,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup ResolveScript
-        uses: ./.github/actions/setup-resolvescript
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            **/requirements*.txt
+            **/pyproject.toml
+            **/setup.py
+            **/setup.cfg
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
 
       - name: Analyze
-        uses: ./.github/actions/analyze
+        run: resolvescript analyze
 
       - name: Build
-        uses: ./.github/actions/build
-        with:
-          project-dir: "."
-          installable: false
+        run: resolvescript build
 
       - name: Test
-        uses: ./.github/actions/test
-        with:
-          project-dir: "."
-          test-args: "-q --tb=short"
+        run: resolvescript test -q --tb=short
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.python-version }}
           path: dist/
@@ -95,15 +98,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Security scan
-        uses: ./.github/actions/security-scan
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          project-dir: "."
-          fail-on-critical: true
-          fail-on-high: true
+          python-version: "3.11"
+          cache: 'pip'
 
-      # Security reports uploaded as artifacts by security-scan action
-      # pip-audit JSON is not valid SARIF, so we skip SARIF upload
+      - name: Install security tools
+        run: pip install pip-audit safety bandit
+
+      - name: Run pip-audit (dependency vulnerabilities)
+        run: |
+          pip-audit --format=json --output=pip-audit.json || true
+          pip-audit --desc --format=text
+
+      - name: Run safety (dependency vulnerabilities)
+        run: |
+          safety check --json --output=safety.json || true
+          safety check
+
+      - name: Run bandit (code security)
+        run: |
+          bandit -r . -f json -o bandit.json || true
+          bandit -r . -f txt
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            pip-audit.json
+            safety.json
+            bandit.json
+          retention-days: 30
+
+      - name: Check for critical vulnerabilities
+        run: |
+          if [[ -f pip-audit.json ]]; then
+            critical=$(jq '[.vulnerabilities[] | select(.severity == "critical")] | length' pip-audit.json)
+            if [[ $critical -gt 0 ]]; then
+              echo "::error::Found $critical critical vulnerabilities"
+              exit 1
+            fi
+          fi
+
+      - name: Check for high vulnerabilities
+        run: |
+          if [[ -f pip-audit.json ]]; then
+            high=$(jq '[.vulnerabilities[] | select(.severity == "high")] | length' pip-audit.json)
+            if [[ $high -gt 0 ]]; then
+              echo "::error::Found $high high vulnerabilities"
+              exit 1
+            fi
+          fi
 
   deps:
     name: Dependency Check
@@ -113,12 +160,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Dependency check
-        uses: ./.github/actions/dependency-check
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          project-dir: "."
-          check-outdated: true
-          check-licenses: true
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install check tools
+        run: pip install pipdeptree pip-licenses
+
+      - name: Check outdated packages
+        run: |
+          echo "## Outdated packages"
+          pip list --outdated --format=json | jq -r '.[] | "\(.name): \(.version) -> \(.latest_version)"' || true
+
+      - name: Check licenses
+        run: |
+          echo "## License report"
+          pip-licenses --format=json --output-file=licenses.json
+          pip-licenses --format=table
+
+          # Check for disallowed licenses
+          ALLOWED="MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Python-2.0"
+          disallowed=$(jq -r --arg allowed "$ALLOWED" '
+            .[] | select(.License | split(";") | map(. | gsub("^\\s+|\\s+$";"")) | any(. | IN($allowed | split(",")) | not)) | "\(.Name): \(.License)"
+          ' licenses.json)
+          if [[ -n "$disallowed" ]]; then
+            echo "::error::Disallowed licenses found:"
+            echo "$disallowed"
+            exit 1
+          fi
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 30
+
+      - name: Dependency tree
+        run: |
+          echo "## Dependency tree"
+          pipdeptree --json | jq -r '.[] | "\(.package.key): \(.package.installed_version)"' | head -50
 
   package:
     name: Package Release Artifacts
@@ -135,14 +218,20 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Package
-        uses: ./.github/actions/package
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          project-dir: "."
-          dist-dir: "dist"
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install ResolveScript
+        run: pip install ResolveScript
+
+      - name: Package
+        run: resolvescript package --dist dist
 
       - name: Upload package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: release-package
           path: dist/*.zip
