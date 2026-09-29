@@ -33,6 +33,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -48,6 +51,11 @@ jobs:
         run: |
           pip install -e .[test]
           pip install ruff pytest
+          if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
+            pip install "setuptools<84"
+          fi
+        env:
+          SETUPTOOLS_USE_DISTUTILS: stdlib
 
       - name: Lint
         run: ruff check src tests
