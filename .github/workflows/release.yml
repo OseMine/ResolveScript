@@ -48,14 +48,10 @@ jobs:
             **/setup.cfg
 
       - name: Install dependencies
-        run: |
-          if [[ "${{ matrix.python-version }}" == "3.9" ]] || [[ "${{ matrix.python-version }}" == "3.12" ]]; then
-            pip install "setuptools<84"
-          fi
-          pip install -e .[test]
-          pip install ruff pytest
-        env:
-          SETUPTOOLS_USE_DISTUTILS: stdlib
+        # Build isolation picks a setuptools that supports the running Python —
+        # pinning one here breaks 3.9 (newer drops it) and 3.12 (a forced
+        # stdlib distutils is gone from the stdlib).
+        run: pip install -e .[test]
 
       - name: Lint
         run: ruff check src tests
@@ -88,7 +84,7 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
@@ -103,7 +99,14 @@ jobs:
   pypi-publish:
     name: Publish to PyPI
     needs: [build-and-test, release]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # Skipped until PyPI trusted publishing (OIDC) is configured for this repo
+    # *and* the PYPI_PUBLISH repository variable is set to "true" — otherwise
+    # every release would end red on an OIDC exchange PyPI does not recognise.
+    # Configure the publisher on pypi.org under the project's publishing
+    # settings, then flip Settings → Secrets and variables → Actions → Variables.
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
+      vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

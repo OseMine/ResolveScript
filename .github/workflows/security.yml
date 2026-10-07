@@ -17,10 +17,32 @@ permissions:
   security-events: write
 
 jobs:
+  # hashFiles() is only legal in a step-level `if:` — as a job-level condition
+  # GitHub rejects the whole file — and it would be empty before checkout anyway.
+  # So the "is this a project?" check lives in a gate job: no manifest at the
+  # root means this workflow belongs to a scaffolded project, and the jobs skip.
+  manifest:
+    name: Manifest check
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for a manifest
+        id: check
+        run: |
+          if [ -f manifest.json ] || [ -f manifest.xml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
   security:
     name: Security Scan (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    if: "hashFiles('manifest.json') != '' || hashFiles('manifest.xml') != ''"
+    needs: manifest
+    if: needs.manifest.outputs.present == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:

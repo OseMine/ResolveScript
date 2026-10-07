@@ -1,17 +1,140 @@
+# Dependabot configuration for ResolveScript projects
+# Place this file at .github/dependabot.yml in your project
+
 version: 2
 updates:
+  # Python dependencies (from pyproject.toml, requirements.txt, setup.py, setup.cfg)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
     labels:
       - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps(pip)"
+      include: "scope"
+    open-pull-requests-limit: 15
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "mypy*"
+          - "tox*"
+          - "pre-commit*"
+          - "coverage*"
+          - "hypothesis*"
+        update-types:
+          - "minor"
+          - "patch"
+      resolve-deps:
+        patterns:
+          - "pydavinci*"
+          - "davinci-rest*"
+          - "ResolveScript*"
+        update-types:
+          - "minor"
+          - "patch"
+      security-tools:
+        patterns:
+          - "pip-audit*"
+          - "safety*"
+          - "bandit*"
+          - "pip-licenses*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Ignore major version updates for specific packages
+    ignore:
+      - dependency-name: "python"
+        versions: [">= 3.13"]
+      - dependency-name: "setuptools"
+        update-types: ["version-update:semver-major"]
+    # Allow all updates for security patches
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
     labels:
       - "dependencies"
-      - "ci"
+      - "github-actions"
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
+    open-pull-requests-limit: 10
+    groups:
+      actions-core:
+        patterns:
+          - "actions/checkout*"
+          - "actions/setup-*"
+          - "actions/cache*"
+          - "actions/upload-artifact*"
+          - "actions/download-artifact*"
+        update-types:
+          - "minor"
+          - "patch"
+      actions-security:
+        patterns:
+          - "github/codeql-action*"
+          - "softprops/action-gh-release*"
+          - "pypa/gh-action-pypi-publish*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker (if using Docker for testing)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps(docker)"
+    open-pull-requests-limit: 5
+
+  # For projects using submodules
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "submodule"
+    commit-message:
+      prefix: "deps(submodule)"
+
+# Security updates
+security-updates:
+  enabled: true
+
+# Registry configuration for private packages (if needed)
+# registries:
+#   private-pypi:
+#     type: python-index
+#     url: https://pypi.example.com/simple
+#     token: ${{ secrets.PYPI_TOKEN }}
+# registries:
+#   github-npm:
+#     type: npm-registry
+#     url: https://npm.pkg.github.com
+#     token: ${{ secrets.GITHUB_TOKEN }}
