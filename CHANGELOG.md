@@ -2,21 +2,46 @@
 
 All notable changes to this project are documented here.
 
-## unreleased
+## 1.0.0 - 2026-10-07
 
-### Planned
-
-- `resolvescript build --installable` — emit a **Lua** file instead of the
-  Python one. Dragged into Fusion's Console or the Workspace, it opens an
-  installer window drawn by the `ResolveScript.ui` engine and installs the
-  script/plugin into the right Resolve location. This is the intended shape;
-  it is not implemented yet, and this entry is here so the decision is not
-  lost. Open questions when it gets built: how much of the payload a Lua
-  console drop can carry, whether the installer UI is authored with the same
-  framework as the tools it installs, and how the workflow plugins root is
-  reached from Lua (Resolve does not expose it to the Lua scripting API).
+One release covering the whole toolchain: scripts, workflow integrations,
+Fusion `.fuse` plugins, precompiled `.plugin` binaries, and the CI that ships
+them. Tested on Python 3.9–3.12 on both Windows and Linux.
 
 ### Added
+
+- **`.fuse` and `.plugin` support** across create/build/export/package/
+  consolidate ([`docs/fuse.md`](docs/fuse.md), [`docs/plugin.md`](docs/plugin.md)):
+  - `resolvescript create <name> --template fuse` scaffolds a project;
+    `resolvescript fuse build | package | install | list | uninstall | root |
+    describe` takes it from there.
+  - `.plugin` binaries are deployed, never built: `resolvescript plugin
+    install | describe | list | uninstall | root`. There is no source to
+    compile, so nothing in the pipeline pretends to make one.
+  - Two-layer validation: structure (`FuRegisterClass` / `Create()` /
+    `Process(req)`, the `InImage` / `OutImage` globals) and then a full
+    `luac -p` parse when Lua is installed — a broken fuse fails here rather
+    than inside Resolve. Generated output is ASCII-only.
+  - Per-OS roots with `RESOLVESCRIPT_FUSES_ROOT` and
+    `RESOLVESCRIPT_FUSION_PLUGINS_ROOT` overrides, both exported from
+    `ResolveScript.config`, plus `--root`.
+- `resolvescript build --installable` — emits one **Lua** file instead of a
+  `.py`. Dragged into Fusion's Console or Workspace it opens an install window
+  (Fusion's own UIManager, `bmd.UIDispatcher`) with install/cancel and an
+  overwrite toggle, decodes the base64 payload, and writes the consolidated
+  script through `fusion:MapPath("Scripts:…")` so the target is Resolve's own
+  answer rather than a hard-coded path. A project's `installer.lua.j2`
+  (or `--installer-template`) redraws the window; a template that leaves an
+  `@@TOKEN@@` behind fails the build instead of shipping.
+- Composite actions in `.github/actions/` for setup, test, analyze, build,
+  build-installable, package, consolidate, install, update, manage,
+  extensions, fuse, plugin, workflow, ci, release and security-scan, plus
+  Dependabot covering both `pip` and `github_actions`.
+- Guides: `docs/fuse.md`, `docs/plugin.md`, `docs/workflow.md`,
+  `docs/ui.md`, `docs/github-actions.md`, `docs/installer.md`, and the rest
+  of the `docs/` set.
+- `tests/test_fuse.py` (137 cases) and `tests/test_installer_lua.py` (13) —
+  the Lua installer had no coverage at all before this.
 
 - `ResolveScript.ui` — a declarative, reactive UI framework for DaVinci
   Resolve tools (96 public exports, documented in [`docs/ui.md`](docs/ui.md)).
@@ -50,12 +75,12 @@ All notable changes to this project are documented here.
 - New test suite `tests/test_library.py` exercising the top-level surface and a
   full scripted pipeline (scaffold → analyze → consolidate → package).
 
-### Workflow Integrations (in progress)
+### Workflow Integrations
 
 `ResolveScript.workflow` — declare a DaVinci Resolve Workflow Integration in
 Python and let ResolveScript generate the files Resolve actually loads. The
-Electron shell, the docs and the dedicated test module are still to come; the
-library, the scaffold template and the CLI are working.
+library, the scaffold template, the CLI and [`docs/workflow.md`](docs/workflow.md)
+work; the dedicated test module is still to come.
 
 - `Integration` / `Context` — the declaration and the live Resolve objects
   Resolve hands a launched script (`resolve`, `project`), with lookups for
@@ -92,6 +117,13 @@ library, the scaffold template and the CLI are working.
   (`Subscription`, `batched`, `is_reactive`) and `PasswordField`, which were
   previously only reachable from their defining submodules.
 - Ruff clean across the whole source tree.
+- Release pipeline rebuilt as a standard Python build: `release.yml` lints,
+  tests and runs `python -m build` on Python 3.9–3.12 for every `v*` tag,
+  creates the GitHub Release, and hands PyPI to OIDC trusted publishing once
+  the `PYPI_PUBLISH` repository variable is set — green either way.
+- The composite actions in `.github/actions/` are for consuming projects:
+  GitHub cannot resolve a local action from this repo's own workflows, so
+  these workflows inline the same commands.
 
 ### Fixed
 
@@ -120,6 +152,37 @@ library, the scaffold template and the CLI are working.
   pointer to `resolvescript workflow install`. Resolve does not load workflow
   integrations from there, so it would have installed a file that silently did
   nothing.
+- Four example workflows (`dependencies`, `fuse`, `security`, `workflow`)
+  ended every run after 0 seconds with "workflow file issue": each declared
+  `runs-on` twice and gated its job with `hashFiles(...)`, which is legal only
+  in a step-level `if:`. The check now lives in a `manifest` job those jobs
+  depend on, so they still skip in a repo without a manifest instead of
+  failing to parse at all.
+- `release-enhanced.yml` duplicated `release.yml` — same name, same `v*` tag
+  trigger, but installing the *published* package rather than the code being
+  released — and carried the same invalid gate. Removed; `release.yml` is the
+  single tag-triggered pipeline.
+- `ui.rows.Accessor` evaluated `str | Callable[...]` at import time, which
+  Python 3.9 rejects: `from __future__ import annotations` defers annotations,
+  not values. It is a `Union` now.
+- `fuse build` and the Lua installer called `Path.write_text(newline=...)`,
+  added in 3.10. Both open the file directly and keep the LF endings Fusion
+  expects.
+- The Windows-path tests read the live environment and Windows separators, so
+  they failed on Linux runners. They set `PROGRAMDATA`/`APPDATA`/`PUBLIC`
+  themselves and build the expected path part by part.
+- `pyproject.toml` still said `0.1.0` while `_version.py` said `1.0.0`, and
+  its extras required pytest 9, which needs Python 3.10 — the 3.9 matrix leg
+  could not install the test suite at all. The versions agree and the floor is
+  honest; the `fuse`/`plugin`/`workflow` subcommands were also only in the
+  working tree, so CI parsed an older `cli.py` and rejected `fuse` as an
+  invalid choice.
+
+### Planned
+
+- Reaching the Workflow Integration plugins root from a Lua installer drop —
+  Resolve does not expose that directory to the Lua scripting API, so
+  `build --installable` targets the Scripts root only.
 
 ## 0.1.2
 

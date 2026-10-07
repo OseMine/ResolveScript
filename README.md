@@ -18,6 +18,7 @@ Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.
 - `build` consolidates the multi-file package into a single `.py` for distribution
 - `add` / `install` / `update` resolve dependencies from GitHub, URLs, archives or local folders and record them in `resolvescript.json`
 - `package` emits `dist/<name>-<version>.tar.gz` plus `SHA256SUMS.txt`
+- `fuse` / `plugin` scaffold, validate, build, package and install Fusion `.fuse` plugins and precompiled `.plugin` binaries
 
 Install with pip: `pip install resolvescript` (Python 3.12+).
 
@@ -104,6 +105,7 @@ Recorded specs live in `resolvescript.json`; use `resolvescript install --locked
   "python": "my_cool_tool",        // package/module name (defaults to "name")
   "entrypoint": "export.py",       // recommended CLI/bootstrap module
   "kind": "script",                 // "script" (default) | "extension" (plugin)
+                                    //   | "workflow" (integration) | "fuse"
   "targets": ["Comp"],              // Scripts subfolders: Comp, Utility, Tool, Render,
                                     //   Deliver, Edit, WorkflowIntegrations, Fusion, root
   "compat": { "resolve": "18.6.4", "python": "3.12" },
@@ -124,6 +126,36 @@ Installs drop into each OS's Resolve Scripts root under the manifest `targets`. 
 - `install --locked` verifies registry entries against recorded specs before reusing them
 
 `--scripts-root` (or `RESOLVESCRIPT_SCRIPTS_ROOT`) overrides OS detection.
+
+## Fusion fuses and plugins
+
+Fuses and plugins ride the same manifest shape with `"kind": "fuse"` — one Lua
+file Fusion compiles, or a precompiled binary Fusion loads:
+
+```console
+$ resolvescript create Posterize --template fuse   # scaffold the project
+$ resolvescript fuse build                         # render, validate, write dist/
+$ resolvescript fuse package                       # dist/Posterize-<version>.zip
+$ resolvescript fuse install                       # into Fusion's Fuses root, recorded
+$ resolvescript fuse list                          # and fuse uninstall to undo it
+```
+
+- **Validation is two-layer** — structure first (`FuRegisterClass` / `Create()` /
+  `Process(req)`, the `InImage` / `OutImage` globals), then a full `luac -p`
+  parse when Lua is installed, so a broken fuse fails here rather than inside
+  Resolve. Generated files are ASCII-only.
+- **`.plugin` binaries are deployed, never built** — precompiled bundles get
+  `resolvescript plugin install | list | uninstall` and nothing else; there is
+  no source to compile.
+- **Roots are per-OS, both overridable** — `RESOLVESCRIPT_FUSES_ROOT` and
+  `RESOLVESCRIPT_FUSION_PLUGINS_ROOT` (or `--root`) point at another location.
+- **`resolvescript build --installable`** emits one Lua file instead of a
+  `.py`: drag it into Fusion's Console or Workspace and it opens an install
+  window that writes the consolidated script where Resolve looks for it.
+  Projects can ship their own `installer.lua.j2` to redraw that window.
+
+Guides: [`docs/fuse.md`](docs/fuse.md), [`docs/plugin.md`](docs/plugin.md),
+[`docs/workflow.md`](docs/workflow.md).
 
 ## Frameworks
 
