@@ -90,14 +90,18 @@ becomes ``""`` here; pass ``placeholder="-"`` if that is your house style.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Union
 
 from .errors import ElementError
 
 __all__ = ["Accessor", "call", "maybe", "rows"]
 
 #: How a column, id or icon name is turned into a value.
-Accessor = str | Callable[[Any], Any]
+#:
+#: ``Union`` rather than ``str | Callable``: this is a value, not an
+#: annotation, so ``from __future__ import annotations`` does not defer it and
+#: 3.9 would raise on evaluation.
+Accessor = Union[str, Callable[[Any], Any]]
 
 
 def call(name: str, *args: Any, **kwargs: Any) -> Callable[[Any], Any]:

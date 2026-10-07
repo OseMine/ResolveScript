@@ -37,10 +37,13 @@ from ResolveScript.scaffold import scaffold_project
 # discovery
 # ---------------------------------------------------------------------------
 def test_default_scripts_root_windows(monkeypatch) -> None:
-    monkeypatch.setenv("APPDATA", r"C:\Users\me\AppData\Roaming")
+    appdata = r"C:\Users\me\AppData\Roaming"
+    monkeypatch.setenv("APPDATA", appdata)
     monkeypatch.setattr("ResolveScript.install.discovery.platform.system", lambda: "Windows")
-    assert default_scripts_root() == Path(
-        r"C:\Users\me\AppData\Roaming\Blackmagic Design\DaVinci Resolve\Fusion\Scripts"
+    # Built part by part: a Windows-style expectation written as one backslashed
+    # string is a single path segment on POSIX, so it would never equal the join.
+    assert default_scripts_root() == (
+        Path(appdata) / "Blackmagic Design" / "DaVinci Resolve" / "Fusion" / "Scripts"
     )
 
 

@@ -8,8 +8,10 @@ their owning milestone; anything still on the M0 skeleton prints a notice.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
+from functools import partial
 from pathlib import Path
 from typing import Callable
 
@@ -21,10 +23,71 @@ from .consolidate import (
     consolidate,
     summarize,
 )
+from .fuse import (
+    FUSES_DIR_NAME,
+    PLUGINS_DIR_NAME,
+    BinaryPlugin,
+    Fuse,
+    FuseError,
+    FusionPathError,
+    install_binary,
+    package_fuse,
+    render_fuse,
+)
+from .fuse import build as build_fuse
+from .fuse import candidates as fuse_candidates
+from .fuse import describe_installed as describe_fuses_installed
+from .fuse import install as install_fuse
+from .fuse import root as fusion_root
+from .fuse import uninstall as uninstall_fuse
+from .installer_lua import InstallerTemplateError, build_installable_lua
 from .manifest.model import ManifestError
 from .scaffold import ScaffoldError, scaffold_project
+from .workflow import (
+    Integration,
+    ScriptOptions,
+    WorkflowError,
+    WorkflowPathError,
+    build,
+    describe_installed,
+    install,
+    install_plugin,
+    install_script,
+    plugins_root,
+    uninstall,
+)
 
 USAGE = 2
+
+#: What to run next, per scaffold template. A fuse has no console, no mock
+#: session and no single-file build, so printing ``resolvescript consolidate``
+#: for one would send the reader down a path that cannot work.
+_NEXT_STEPS: dict[str, tuple[str, ...]] = {
+    "minimal": (
+        "  resolvescript dev     # iterate against the mock Resolve API",
+        "  resolvescript test    # run the smoke tests",
+        "  resolvescript build   # consolidate into a single file",
+        "  resolvescript install # install into DaVinci Resolve",
+    ),
+    "lua": (
+        "  resolvescript test    # run the smoke tests",
+        "  resolvescript install # install into DaVinci Resolve",
+    ),
+    "workflow": (
+        "  resolvescript workflow describe   # check the declaration loads",
+        "  resolvescript workflow build      # dist/: launcher + Electron shell",
+        "  resolvescript workflow install    # Workspace > Workflow Integrations",
+        "  resolvescript test                # run against the mock Resolve API",
+    ),
+    "fuse": (
+        "  resolvescript fuse describe       # check the declaration loads",
+        "  resolvescript fuse build          # dist/*.fuse, validated",
+        "  resolvescript fuse install        # into the Fusion Fuses directory",
+        "  resolvescript test                # run the smoke tests",
+    ),
+}
+_NEXT_STEPS["pydavinci"] = _NEXT_STEPS["minimal"]
+_NEXT_STEPS["davinci-rest"] = _NEXT_STEPS["minimal"]
 
 
 def _skeleton(name: str) -> Callable[[argparse.Namespace], int]:
@@ -55,10 +118,8 @@ def _cmd_create(args: argparse.Namespace) -> int:
         print(f"  {rel}")
     print("\nNext steps:")
     print(f"  cd {root}")
-    print("  resolvescript dev     # iterate against the mock Resolve API")
-    print("  resolvescript test    # run the smoke tests")
-    print("  resolvescript build   # consolidate into a single file")
-    print("  resolvescript install # install into DaVinci Resolve")
+    for line in _NEXT_STEPS.get(args.template, _NEXT_STEPS["minimal"]):
+        print(line)
     return 0
 
 
@@ -87,7 +148,39 @@ def _cmd_build(args: argparse.Namespace) -> int:
     if not manifest.consolidate.enabled:
         print("resolvescript: consolidate is disabled in the manifest; nothing to build")
         return 0
+
     output = Path(args.output) if args.output else None
+
+    if args.installable:
+        # Generate Lua installer instead of Python file
+        installer_template = Path(args.installer_template).expanduser() if args.installer_template else None
+        # If no explicit template, check for project's installer.lua.j2
+        if installer_template is None:
+            candidate = root / "installer.lua.j2"
+            if candidate.is_file():
+                installer_template = candidate
+        # Default output for installer
+        if output is None:
+            output = root / "dist" / f"{manifest.name.replace(' ', '_').replace('-', '_')}_installer.lua"
+        elif output.suffix != ".lua":
+            output = output.with_suffix(".lua")
+        try:
+            build_installable_lua(
+                manifest,
+                root,
+                output,
+                installer_template=installer_template,
+                target_category="Scripts/Utility",  # Could be configurable via manifest later
+                overwrite=True,
+            )
+        except (ConsolidateError, InstallerTemplateError) as exc:
+            print(f"resolvescript: build failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"Created Lua installer: {output}")
+        print("Drag this file into Fusion's Console or Workspace to install the script.")
+        return 0
+
+    # Regular Python consolidation
     config = config_from_manifest(root, manifest, output_override=output)
     try:
         result = consolidate(config)
@@ -638,6 +731,409 @@ def _cmd_dev(args: argparse.Namespace) -> int:
     return 0
 
 
+def _manifest_workflow_entrypoint(project_root: Path) -> str:
+    """Read ``workflow.entrypoint`` from a project manifest, if it has one.
+
+    Returns ``""`` rather than raising: the caller has a better message for a
+    project that simply has no workflow manifest than a parse error would be.
+    """
+    for name in ("manifest.json", "manifest.xml"):
+        path = project_root / name
+        if not path.is_file():
+            continue
+        try:
+            if name.endswith(".json"):
+                from .manifest.json_reader import load_manifest
+
+                manifest = load_manifest(path)
+            else:
+                from .manifest.xml_reader import load_manifest as load_xml
+
+                manifest = load_xml(path)
+        except ManifestError:
+            continue
+        if getattr(manifest, "is_workflow", False) and manifest.workflow.entrypoint:
+            return manifest.workflow.entrypoint
+    return ""
+
+
+def _manifest_fusion_entrypoint(project_root: Path) -> str:
+    """Read ``fusion.entrypoint`` from a project manifest, if it has one."""
+    for name in ("manifest.json", "manifest.xml"):
+        path = project_root / name
+        if not path.is_file():
+            continue
+        try:
+            if name.endswith(".json"):
+                from .manifest.json_reader import load_manifest
+
+                manifest = load_manifest(path)
+            else:
+                from .manifest.xml_reader import load_manifest as load_xml
+
+                manifest = load_xml(path)
+        except ManifestError:
+            continue
+        if getattr(manifest, "is_fuse", False) and manifest.fusion.entrypoint:
+            return manifest.fusion.entrypoint
+    return ""
+
+
+def _fuse_add_source(sp: argparse.ArgumentParser) -> None:
+    """Options for a fuse subcommand that has to import the project."""
+    sp.add_argument(
+        "--entrypoint",
+        help="where the Fuse lives, 'my_pkg.fuse:FUSE' "
+        "(default: fusion.entrypoint from manifest.json)",
+    )
+    sp.add_argument(
+        "--project-root",
+        help="directory to put on sys.path so the declaration imports (default: cwd)",
+    )
+
+
+def _fuse_add_root(sp: argparse.ArgumentParser, which: str = FUSES_DIR_NAME) -> None:
+    """Options for a subcommand that touches a Fusion plugin directory."""
+    env = "RESOLVESCRIPT_FUSES_ROOT" if which == FUSES_DIR_NAME else "RESOLVESCRIPT_FUSION_PLUGINS_ROOT"
+    sp.add_argument("--root", help=f"override the {which} directory / {env}")
+
+
+def _fuse_target(args: argparse.Namespace, which: str = FUSES_DIR_NAME) -> Path:
+    """The plugin directory a fuse subcommand should act on."""
+    return fusion_root(which, getattr(args, "root", None))
+
+
+def _fuse_load(args: argparse.Namespace) -> Fuse:
+    """Import the project's :class:`~ResolveScript.fuse.Fuse` declaration.
+
+    Mirrors the workflow loader, including the manifest fallback, so ``resolvescript
+    fuse build`` needs no flags in a project created with ``--template fuse``.
+    """
+    entry = args.entrypoint or _manifest_fusion_entrypoint(Path.cwd())
+    if not entry:
+        raise FuseError(
+            "could not find the fuse declaration. Pass --entrypoint "
+            "my_pkg.fuse:FUSE, or add a 'fusion.entrypoint' to manifest.json."
+        )
+    module_path, _, attribute = entry.partition(":")
+    attribute = attribute or "FUSE"
+    root = Path(args.project_root).expanduser() if args.project_root else Path.cwd()
+    # A fuse is always built from a source tree — the .fuse file is the output —
+    # so the project root goes on the path rather than relying on an install.
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise FuseError(f"could not import {module_path!r}: {exc}") from exc
+    found = getattr(module, attribute, None)
+    if not isinstance(found, Fuse):
+        raise FuseError(f"{entry!r} did not resolve to a Fuse (got {type(found).__name__})")
+    return found
+
+
+def _fuse_binary(args: argparse.Namespace, path: str) -> BinaryPlugin:
+    """Build a :class:`BinaryPlugin` from a command-line path.
+
+    ``path`` is passed in rather than read off the namespace because the two
+    groups spell the argument differently — ``--plugin`` on ``fuse package``, a
+    positional on ``plugin install`` — and a single reader that guessed wrong
+    would surface as an ``AttributeError`` rather than a message.
+    """
+    return BinaryPlugin(
+        path=Path(path).expanduser(),
+        name=getattr(args, "name", "") or "",
+        target=getattr(args, "target", "") or "",
+        notes=getattr(args, "notes", "") or "",
+    )
+
+
+def _cmd_fuse(args: argparse.Namespace, action: str) -> int:
+    """Dispatch a ``resolvescript fuse <action>`` subcommand."""
+    if action == "root":
+        if args.list:
+            for name in (FUSES_DIR_NAME, PLUGINS_DIR_NAME):
+                print(f"{name}:")
+                for path in fuse_candidates(name):
+                    print(f"  {'*' if path.is_dir() else ' '} {path}")
+                print()
+            return 0
+        try:
+            print(_fuse_target(args, args.which))
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if action == "list":
+        try:
+            target = _fuse_target(args)
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print("\n".join(describe_fuses_installed(target, kind="fuse")))
+        return 0
+
+    if action == "uninstall":
+        try:
+            target = _fuse_target(args)
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        removed = uninstall_fuse(args.name, target, kind="fuse")
+        print("\n".join(removed) or f"'{args.name}' was not installed")
+        return 0
+
+    try:
+        fuse = _fuse_load(args)
+    except FuseError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "describe":
+        print("\n".join(fuse.describe()))
+        return 0
+
+    if action == "build":
+        if args.stdout:
+            print(render_fuse(fuse), end="")
+            return 0
+        out = Path(args.out).expanduser() if args.out else Path.cwd() / "dist"
+        try:
+            result = build_fuse(fuse, out, check=not args.no_check)
+        except FuseError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print("\n".join(result.describe()))
+        return 0
+
+    if action == "package":
+        dist = Path(args.dist).expanduser() if args.dist else Path.cwd() / "dist"
+        try:
+            plugin = _fuse_binary(args, args.plugin) if args.plugin else None
+        except FuseError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            result = package_fuse(fuse, dist, plugin=plugin, check=not args.no_check)
+        except FuseError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print("\n".join(result.describe()))
+        return 0
+
+    # action == "install"
+    try:
+        target = _fuse_target(args)
+    except FusionPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        result = install_fuse(
+            fuse, target, dry_run=args.dry_run, check=not args.no_check
+        )
+    except FuseError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(result.describe()))
+    return 0
+
+
+def _cmd_plugin(args: argparse.Namespace, action: str) -> int:
+    """Dispatch a ``resolvescript plugin <action>`` subcommand.
+
+    Every subcommand here *deploys* a compiled plugin. None of them build one:
+    a ``.plugin`` is a native binary or platform bundle, and there is no source
+    form this tool could compile it from.
+    """
+    which = PLUGINS_DIR_NAME
+    if action == "root":
+        if args.list:
+            print(f"{which}:")
+            for path in fuse_candidates(which):
+                print(f"  {'*' if path.is_dir() else ' '} {path}")
+            return 0
+        try:
+            print(_fuse_target(args, which))
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if action == "list":
+        try:
+            target = _fuse_target(args, which)
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print("\n".join(describe_fuses_installed(target, kind="plugin")))
+        return 0
+
+    if action == "uninstall":
+        try:
+            target = _fuse_target(args, which)
+        except FusionPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        removed = uninstall_fuse(args.name, target, kind="plugin")
+        print("\n".join(removed) or f"'{args.name}' was not installed")
+        return 0
+
+    try:
+        plugin = _fuse_binary(args, args.path)
+    except FuseError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "describe":
+        print("\n".join(plugin.describe()))
+        return 0
+
+    try:
+        target = _fuse_target(args, which)
+    except FusionPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        result = install_binary(
+            plugin, target, dry_run=args.dry_run, overwrite=not args.no_force
+        )
+    except FuseError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(result.describe()))
+    return 0
+
+
+def _wf_add_source(sp: argparse.ArgumentParser) -> None:
+    """Options for a workflow subcommand that has to import the project."""
+    sp.add_argument(
+        "--entrypoint",
+        help="where the Integration lives, 'my_pkg.workflow:INTEGRATION' "
+        "(default: workflow.entrypoint from manifest.json)",
+    )
+    sp.add_argument(
+        "--project-root",
+        help="directory the generated launcher puts on sys.path (default: cwd)",
+    )
+
+
+def _wf_add_root(sp: argparse.ArgumentParser) -> None:
+    """Options for a workflow subcommand that touches a plugins directory."""
+    sp.add_argument(
+        "--root",
+        help="override the Workflow Integration Plugins directory / "
+        "RESOLVESCRIPT_WORKFLOWS_ROOT",
+    )
+
+
+def _wf_load(args: argparse.Namespace) -> tuple[Integration, ScriptOptions]:
+    """Import the project's :class:`~ResolveScript.workflow.Integration`.
+
+    Returns it together with the :class:`~ResolveScript.workflow.ScriptOptions`
+    describing where it was found, which is what the generated launcher needs.
+    """
+    entry = args.entrypoint or _manifest_workflow_entrypoint(Path.cwd())
+    if not entry:
+        raise WorkflowError(
+            "could not find the integration. Pass --entrypoint "
+            "my_pkg.workflow:INTEGRATION, or add a 'workflow.entrypoint' to "
+            "manifest.json."
+        )
+    module_path, _, attribute = entry.partition(":")
+    attribute = attribute or "INTEGRATION"
+    root = Path(args.project_root).expanduser() if args.project_root else Path.cwd()
+    # The project is not necessarily installed, and a workflow integration is
+    # always built from a source tree, so its root goes on the path first.
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise WorkflowError(f"could not import {module_path!r}: {exc}") from exc
+    found = getattr(module, attribute, None)
+    if not isinstance(found, Integration):
+        raise WorkflowError(
+            f"{entry!r} did not resolve to an Integration (got {type(found).__name__})"
+        )
+    return found, ScriptOptions(module_path, attribute, project_root=str(root))
+
+
+def _wf_target(args: argparse.Namespace) -> Path:
+    """The plugins directory a workflow subcommand should act on."""
+    return Path(plugins_root(getattr(args, "root", None)))
+
+
+def _cmd_workflow(args: argparse.Namespace, action: str) -> int:
+    """Dispatch a ``resolvescript workflow <action>`` subcommand."""
+    # These subcommands act on a plugins directory, which has no usable
+    # default on every platform; say so rather than failing on a write.
+    if action in {"list", "root"}:
+        try:
+            target = _wf_target(args)
+        except WorkflowPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if action == "root":
+            print(target)
+            return 0
+        print("\n".join(describe_installed(target)))
+        return 0
+
+    if action == "uninstall":
+        try:
+            target = _wf_target(args)
+        except WorkflowPathError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        removed = uninstall(args.id, target)
+        print("\n".join(removed) or f"'{args.id}' was not installed")
+        return 0
+
+    try:
+        integration, options = _wf_load(args)
+    except WorkflowError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "describe":
+        print("\n".join(integration.describe()))
+        return 0
+
+    if action == "build":
+        out = Path(args.out).expanduser() if args.out else Path.cwd() / "dist"
+        result = build(integration, out, options=options, electron=not args.script_only)
+        print("\n".join(result.describe()))
+        return 0
+
+    try:
+        target = _wf_target(args)
+    except WorkflowPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "install":
+        result = install(
+            integration,
+            target,
+            options=options,
+            electron=not args.script_only,
+            dry_run=args.dry_run,
+        )
+    elif action == "install-script":
+        result = install_script(integration, target, options=options, dry_run=args.dry_run)
+    else:
+        result = install_plugin(integration, target, options=options, dry_run=args.dry_run)
+
+    print("\n".join(result.describe()))
+    if not result.dry_run and result.script is not None:
+        # Resolve scans the directory once, on launch, so the change is not
+        # live until it restarts. Say so — this is the single most surprising
+        # part of installing a Workflow Integration.
+        print("Restart DaVinci Resolve, then open it from Workspace > Workflow Integrations.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="resolvescript",
@@ -655,7 +1151,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", dest="fmt", action="store_const", const="json", default="json", help="generate manifest.json (default)")
     p.add_argument("--xml", dest="fmt", action="store_const", const="xml", help="generate manifest.xml")
     p.add_argument("--dir", help="parent directory to create the project in")
-    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, toolkit)")
+    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, pydavinci, davinci-rest, lua, workflow, fuse)")
     p.set_defaults(func=_cmd_create)
 
     p = sub.add_parser("dev", help="sandboxed dev loop / REPL against the mock Resolve API")
@@ -676,6 +1172,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("build", help="consolidate the multi-file package into a single file")
     p.add_argument("--output", help="output path (default: dist/<manifest output>)")
+    p.add_argument(
+        "--installable",
+        action="store_true",
+        help="generate a Lua installer (drag into Fusion Console) instead of a Python file",
+    )
+    p.add_argument(
+        "--installer-template",
+        help="path to a custom installer template (default: project's installer.lua.j2)",
+    )
     p.set_defaults(func=_cmd_build)
 
     p = sub.add_parser("package", help="assemble release artifacts into dist/")
@@ -717,6 +1222,153 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("package_dir", help="package directory to consolidate")
     p.add_argument("--output", required=True, help="output file path")
     p.set_defaults(func=_cmd_consolidate)
+
+    p = sub.add_parser(
+        "workflow",
+        help="build and install Workflow Integrations (Workspace > Workflow Integrations)",
+    )
+    wf = p.add_subparsers(dest="workflow_command", metavar="<workflow>", required=True)
+
+    sp = wf.add_parser("build", help="generate the launcher and plugin into dist/")
+    _wf_add_source(sp)
+    sp.add_argument("--out", help="output directory (default: ./dist)")
+    sp.add_argument("--script-only", action="store_true", help="skip the Electron shell")
+    sp.set_defaults(func=partial(_cmd_workflow, action="build"))
+
+    sp = wf.add_parser("install", help="install where Resolve will find it")
+    _wf_add_source(sp)
+    _wf_add_root(sp)
+    sp.add_argument("--script-only", action="store_true", help="skip the Electron shell")
+    sp.add_argument("--dry-run", action="store_true", help="report without writing")
+    sp.set_defaults(func=partial(_cmd_workflow, action="install"))
+
+    sp = wf.add_parser("install-script", help="install only the Python launcher")
+    _wf_add_source(sp)
+    _wf_add_root(sp)
+    sp.add_argument("--dry-run", action="store_true", help="report without writing")
+    sp.set_defaults(func=partial(_cmd_workflow, action="install-script"))
+
+    sp = wf.add_parser("install-plugin", help="install only the Electron shell")
+    _wf_add_source(sp)
+    _wf_add_root(sp)
+    sp.add_argument("--dry-run", action="store_true", help="report without writing")
+    sp.set_defaults(func=partial(_cmd_workflow, action="install-plugin"))
+
+    sp = wf.add_parser("list", help="list installed workflow integrations")
+    _wf_add_root(sp)
+    sp.set_defaults(func=partial(_cmd_workflow, action="list"))
+
+    sp = wf.add_parser("uninstall", help="remove an installed integration")
+    sp.add_argument("id", help="the plugin id, e.g. com.acme.deliver")
+    _wf_add_root(sp)
+    sp.set_defaults(func=partial(_cmd_workflow, action="uninstall"))
+
+    sp = wf.add_parser("root", help="print the Workflow Integration Plugins directory")
+    _wf_add_root(sp)
+    sp.set_defaults(func=partial(_cmd_workflow, action="root"))
+
+    sp = wf.add_parser("describe", help="print the integration's metadata")
+    _wf_add_source(sp)
+    sp.set_defaults(func=partial(_cmd_workflow, action="describe"))
+
+    p = sub.add_parser(
+        "fuse",
+        help="build, install and package Fusion fuses (.fuse plugins)",
+    )
+    fu = p.add_subparsers(dest="fuse_command", metavar="<fuse>", required=True)
+
+    sp = fu.add_parser("build", help="generate the .fuse file into dist/")
+    _fuse_add_source(sp)
+    sp.add_argument("--out", help="output directory (default: ./dist)")
+    sp.add_argument(
+        "--stdout", action="store_true", help="print the .fuse source instead of writing it"
+    )
+    sp.add_argument(
+        "--no-check",
+        action="store_true",
+        help="do not validate the generated file (it will not load if it is wrong)",
+    )
+    sp.set_defaults(func=partial(_cmd_fuse, action="build"))
+
+    sp = fu.add_parser("install", help="install where Fusion will find it")
+    _fuse_add_source(sp)
+    _fuse_add_root(sp)
+    sp.add_argument("--dry-run", action="store_true", help="report without writing")
+    sp.add_argument("--no-check", action="store_true", help="do not validate the file")
+    sp.set_defaults(func=partial(_cmd_fuse, action="install"))
+
+    sp = fu.add_parser("package", help="bundle the fuse into a zip with a checksum")
+    _fuse_add_source(sp)
+    sp.add_argument("--dist", help="output directory (default: ./dist)")
+    sp.add_argument(
+        "--plugin",
+        help="a prebuilt .plugin to carry alongside the fuse",
+    )
+    sp.add_argument("--name", help="override the compiled plugin's name")
+    sp.add_argument("--no-check", action="store_true", help="do not validate the file")
+    sp.set_defaults(func=partial(_cmd_fuse, action="package"))
+
+    sp = fu.add_parser("list", help="list installed fuses")
+    _fuse_add_root(sp)
+    sp.set_defaults(func=partial(_cmd_fuse, action="list"))
+
+    sp = fu.add_parser("uninstall", help="remove an installed fuse")
+    sp.add_argument("name", help="the class name or file, e.g. Posterize")
+    _fuse_add_root(sp)
+    sp.set_defaults(func=partial(_cmd_fuse, action="uninstall"))
+
+    sp = fu.add_parser("root", help="print the Fusion plugin directories")
+    _fuse_add_root(sp)
+    sp.add_argument(
+        "--which",
+        choices=[FUSES_DIR_NAME, PLUGINS_DIR_NAME],
+        default=FUSES_DIR_NAME,
+        help="which directory to print (default: Fuses)",
+    )
+    sp.add_argument(
+        "--list", action="store_true", help="print every known candidate, not just the one in use"
+    )
+    sp.set_defaults(func=partial(_cmd_fuse, action="root"))
+
+    sp = fu.add_parser("describe", help="print the fuse's metadata")
+    _fuse_add_source(sp)
+    sp.set_defaults(func=partial(_cmd_fuse, action="describe"))
+
+    p = sub.add_parser(
+        "plugin",
+        help="deploy compiled Fusion plugins (.plugin) — never builds them",
+    )
+    pl = p.add_subparsers(dest="plugin_command", metavar="<plugin>", required=True)
+
+    sp = pl.add_parser("install", help="copy a prebuilt .plugin into the Plugins directory")
+    sp.add_argument("path", help="the .plugin file or bundle to deploy")
+    sp.add_argument("--name", help="name to record it under (default: the file name)")
+    sp.add_argument("--target", help="installed file name, when it must differ")
+    sp.add_argument("--notes", help="free text carried into 'plugin list'")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.add_argument("--dry-run", action="store_true", help="report without copying")
+    sp.add_argument(
+        "--no-force", action="store_true", help="fail if the target already exists"
+    )
+    sp.set_defaults(func=partial(_cmd_plugin, action="install"))
+
+    sp = pl.add_parser("describe", help="print what is known about a .plugin")
+    sp.add_argument("path", help="the .plugin file or bundle")
+    sp.set_defaults(func=partial(_cmd_plugin, action="describe"))
+
+    sp = pl.add_parser("list", help="list installed compiled plugins")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.set_defaults(func=partial(_cmd_plugin, action="list"))
+
+    sp = pl.add_parser("uninstall", help="remove an installed compiled plugin")
+    sp.add_argument("name", help="the name it was installed under")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.set_defaults(func=partial(_cmd_plugin, action="uninstall"))
+
+    sp = pl.add_parser("root", help="print the Fusion Plugins directory")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.add_argument("--list", action="store_true", help="print every known candidate")
+    sp.set_defaults(func=partial(_cmd_plugin, action="root"))
 
     p = sub.add_parser("manage", help="low-level install registry operations")
     manage = p.add_subparsers(dest="manage_command", metavar="<manage>", required=True)

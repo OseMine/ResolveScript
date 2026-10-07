@@ -72,6 +72,7 @@ resolvescript install <spec>             # one-off install of a single spec, no 
 resolvescript update [<name>]            # re-resolve within recorded ranges; --fix realigns Resolve/Python compat
 resolvescript remove <name>              # uninstall + unrecord (npm uninstall)
 resolvescript search <query>             # discover extensions (known list; registry index later)
+resolvesctipt clean                      # deletes all resolvescript cache, build and extensions files
 
 resolvescript manage list                # list installed extensions (reads .resolvescript/install.json)
 resolvescript consolidate <package>      # one-off: merge a package dir into one .py
@@ -754,10 +755,6 @@ anything optional becomes a plugin, not a core feature (§9).
 framework extension* (M5c plugin), not a core command, unless it grows enough
 demand to be promoted.
 
-- [ ] **Rotoscope migration**: migrate `X:\coding\Rotoscope` to consume the CLI
-      (replace `scripts/build.py` + `scripts/install.py` + `dev/sandbox.py`
-      with `resolvescript build/install/dev test`), keeping Rotoscope package
-      code unchanged; Rotoscope becomes the framework's reference Resolve script.
 - [ ] Auto-generate mock methods from real `DaVinciResolveScript.py` (parse the bundled module) so `dev`/`test` never `NotImplementedError` — could ship as a plugin (`provides: mocks:*`)
 - [ ] Auto-generate mock methods from real `DaVinciResolveScript.py` (parse the bundled module) so `dev`/`test` never `NotImplementedError`
 - [ ] `resolvescript publish <ext>` — push a built extension to a release / registry index without manual CI

@@ -57,3 +57,5 @@ Thumbs.db
 # CI / Build
 .github/workflows/*.yml.bak
 *.orig
+# setuptools build directory (root only — 'build/' would also hide .github/actions/*/build)
+/build/

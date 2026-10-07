@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0,<84"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "resolvescript"
-version = "0.1.0"
+version = "1.0.0"
 description = "CLI and library framework for building, coding, testing, packaging and installing DaVinci Resolve scripts."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -23,8 +23,14 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# pytest 9 needs Python >=3.10, so the floor stays low enough for 3.9: the
+# resolver still picks the newest pytest the running interpreter allows.
 dev = [
-    "pytest>=9.1.1",
+    "pytest>=7",
+    "ruff>=0.16.9",
+]
+test = [
+    "pytest>=7",
     "ruff>=0.16.9",
 ]
 

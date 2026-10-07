@@ -185,7 +185,12 @@ def build(
     for rel, source in sorted(files.items()):
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source, encoding="utf-8", newline="\n")
+        # open() rather than write_text(newline=): that parameter is 3.10+, and
+        # newline="\n" is what keeps the file LF on Windows (write_text's
+        # default would translate to CRLF, which Fusion does not need and the
+        # tests pin).
+        with target.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(source)
         result.files.append(target)
 
     if check:

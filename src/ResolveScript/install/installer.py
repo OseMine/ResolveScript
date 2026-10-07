@@ -237,6 +237,27 @@ def install_package(
     # Validate manifest.name prevents path traversal (critical)
     _validate_name(manifest.name)
 
+    if manifest.is_workflow:
+        # A Workflow Integration is not a script. Resolve scans a separate
+        # plugins directory for it and would never look here, so installing it
+        # into the Scripts root would produce a file that silently does
+        # nothing — worth failing on rather than reporting a success.
+        raise InstallError(
+            f"'{manifest.name}' is a Workflow Integration, which Resolve loads from "
+            "the Workflow Integration Plugins directory, not the Scripts root. "
+            "Run 'resolvescript workflow install' instead."
+        )
+
+    if manifest.is_fuse:
+        # Same shape as the workflow case: Fusion builds its plugin registry from
+        # its own Fuses directory, so a fuse dropped into the Scripts root is a
+        # file Resolve never reads and Fusion never compiles.
+        raise InstallError(
+            f"'{manifest.name}' is a Fusion fuse, which Fusion loads from its Fuses "
+            "directory, not the Scripts root. Run 'resolvescript fuse install' "
+            "instead."
+        )
+
     rel_files = select_files(package_dir, manifest.install.include, manifest.install.exclude)
     entrypoint = discover_entrypoint(package_dir, manifest)
     entry_rel = entrypoint.relative_to(package_dir).as_posix() if entrypoint is not None else None

@@ -740,7 +740,13 @@ class TestPaths:
         paths = [str(p) for p in candidates(FUSES_DIR_NAME, "Darwin")]
         assert any("DaVinci Resolve" in p for p in paths)
 
-    def test_the_windows_resolve_path_is_under_programdata(self) -> None:
+    def test_the_windows_resolve_path_is_under_programdata(self, monkeypatch) -> None:
+        # The Windows table is read from the environment, and a CI runner has
+        # none of these set — without them the candidates fall back to $HOME and
+        # the test would be asserting on where the machine happens to be.
+        monkeypatch.setenv("PROGRAMDATA", r"C:\ProgramData")
+        monkeypatch.setenv("APPDATA", r"C:\Users\me\AppData\Roaming")
+        monkeypatch.setenv("PUBLIC", r"C:\Users\Public")
         assert all(
             "ProgramData" in str(p) or "AppData" in str(p) or "Documents" in str(p)
             for p in candidates(FUSES_DIR_NAME, "Windows")

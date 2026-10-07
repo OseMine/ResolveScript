@@ -476,7 +476,10 @@ def build_installable_lua(
     rendered = _fill(template, tokens)
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(rendered, encoding="utf-8", newline="\n")
+    # newline="\n" keeps the Lua installer LF-only on Windows; open() rather
+    # than write_text because the newline parameter needs 3.10.
+    with output.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(rendered)
     return output
 
 

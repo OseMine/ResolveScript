@@ -217,6 +217,86 @@ class ExtensionConfig:
 
 
 @dataclass
+class WorkflowConfig:
+    """Workflow Integration metadata (only used when kind == "workflow").
+
+    These fields mirror :class:`ResolveScript.workflow.Integration`. They are
+    duplicated here rather than imported because a manifest is read without
+    the project being importable — the point of the block is to describe the
+    integration to tooling that only has the manifest.
+    """
+
+    id: str = ""  # reverse-DNS plugin id, also the installed folder name
+    name: str = ""  # the menu label under Workspace > Workflow Integrations
+    version: str = ""
+    description: str = ""
+    entrypoint: str = ""  # "my_pkg.workflow:INTEGRATION"
+    callbacks: list[str] = field(default_factory=list)  # e.g. ["RenderStart"]
+    electron: bool = True  # also build the Electron plugin shell
+
+    def as_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key in ("id", "name", "version", "description", "entrypoint"):
+            value = getattr(self, key)
+            if value:
+                result[key] = value
+        if self.callbacks:
+            result["callbacks"] = list(self.callbacks)
+        if not self.electron:
+            result["electron"] = False
+        return result
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.as_dict()
+
+
+@dataclass
+class FusionConfig:
+    """Fusion tool metadata (only used when kind == "fuse").
+
+    A *fuse* is Fusion's scripted plugin: a single Lua file with a ``.fuse``
+    extension that Fusion compiles on the fly, so there is nothing to compile
+    here. These fields mirror :class:`ResolveScript.fuse.Fuse` and are
+    duplicated for the same reason as :class:`WorkflowConfig` — a manifest is
+    read without the project being importable.
+
+    A *compiled* Fusion plugin (``.plugin``) is a native binary this tool
+    cannot build, so ``binary`` records one being carried rather than made.
+    """
+
+    entrypoint: str = ""  # "my_pkg.fuse:FUSE" — where the Fuse is declared
+    class_name: str = ""  # the FuRegisterClass name; also the .fuse file name
+    display_name: str = ""  # REGS_Name
+    category: str = ""  # REGS_Category, backslash-separated
+    icon_string: str = ""  # REGS_OpIconString, the 3-letter search code
+    description: str = ""  # REGS_OpDescription
+    tool_type: str = "CT_Tool"  # CT_Tool | CT_SourceTool | CT_Operator
+    binary: str = ""  # a prebuilt .plugin file to deploy, not to build
+
+    def as_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key in (
+            "entrypoint",
+            "class_name",
+            "display_name",
+            "category",
+            "icon_string",
+            "description",
+            "tool_type",
+            "binary",
+        ):
+            value = getattr(self, key)
+            if value:
+                result[key] = value
+        return result
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.as_dict()
+
+
+@dataclass
 class Manifest:
     """A Resolve script manifest (or, with ``kind="extension"``, a plugin)."""
 
@@ -235,12 +315,32 @@ class Manifest:
     consolidate: ConsolidateConfig = field(default_factory=ConsolidateConfig)
     dependencies: list[str] = field(default_factory=list)
     install: InstallConfig = field(default_factory=InstallConfig)
-    kind: str = "script"  # "script" | "extension" (plugin)
+    kind: str = "script"  # "script" | "extension" (plugin) | "workflow" | "fuse"
     extension: ExtensionConfig = field(default_factory=ExtensionConfig)
+    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
+    fusion: FusionConfig = field(default_factory=FusionConfig)
 
     @property
     def is_plugin(self) -> bool:
         return self.kind == "extension"
+
+    @property
+    def is_fuse(self) -> bool:
+        """Whether this manifest describes a Fusion fuse.
+
+        Like a workflow, a fuse is installed into a Fusion directory rather
+        than the Scripts root, so it has no meaningful ``targets`` either.
+        """
+        return self.kind == "fuse"
+
+    @property
+    def is_workflow(self) -> bool:
+        """Whether this manifest describes a Workflow Integration.
+
+        A workflow is *not* installed into the Scripts root — Resolve scans a
+        separate plugins directory — so it also has no meaningful ``targets``.
+        """
+        return self.kind == "workflow"
 
     @property
     def default_package_dir(self) -> str:
@@ -276,6 +376,10 @@ class Manifest:
             result["kind"] = self.kind
         if self.is_plugin and self.extension.as_dict():
             result["extension"] = self.extension.as_dict()
+        if self.is_workflow and self.workflow.as_dict():
+            result["workflow"] = self.workflow.as_dict()
+        if self.is_fuse and self.fusion.as_dict():
+            result["fusion"] = self.fusion.as_dict()
         return result
 
 
@@ -354,6 +458,8 @@ def manifest_from_dict(raw: dict[str, Any], source: str = "<manifest>") -> Manif
     cons_raw = _as_dict(raw.get("consolidate"), "consolidate", source)
     inst_raw = _as_dict(raw.get("install"), "install", source)
     ext_raw = _as_dict(raw.get("extension"), "extension", source)
+    wf_raw = _as_dict(raw.get("workflow"), "workflow", source)
+    fu_raw = _as_dict(raw.get("fusion"), "fusion", source)
 
     install_to = _as_str(inst_raw.get("to"), "install.to", source) or "resolve"
     if install_to not in {"resolve", "framework"}:
@@ -411,4 +517,23 @@ def manifest_from_dict(raw: dict[str, Any], source: str = "<manifest>") -> Manif
             to=install_to,
         ),
         extension=extension,
+        workflow=WorkflowConfig(
+            id=_as_str(wf_raw.get("id"), "workflow.id", source) or "",
+            name=_as_str(wf_raw.get("name"), "workflow.name", source) or "",
+            version=_as_str(wf_raw.get("version"), "workflow.version", source) or "",
+            description=_as_str(wf_raw.get("description"), "workflow.description", source) or "",
+            entrypoint=_as_str(wf_raw.get("entrypoint"), "workflow.entrypoint", source) or "",
+            callbacks=_as_str_list(wf_raw.get("callbacks"), "workflow.callbacks", source),
+            electron=_as_bool(wf_raw.get("electron"), "workflow.electron", source, True),
+        ),
+        fusion=FusionConfig(
+            entrypoint=_as_str(fu_raw.get("entrypoint"), "fusion.entrypoint", source) or "",
+            class_name=_as_str(fu_raw.get("class_name"), "fusion.class_name", source) or "",
+            display_name=_as_str(fu_raw.get("display_name"), "fusion.display_name", source) or "",
+            category=_as_str(fu_raw.get("category"), "fusion.category", source) or "",
+            icon_string=_as_str(fu_raw.get("icon_string"), "fusion.icon_string", source) or "",
+            description=_as_str(fu_raw.get("description"), "fusion.description", source) or "",
+            tool_type=_as_str(fu_raw.get("tool_type"), "fusion.tool_type", source) or "CT_Tool",
+            binary=_as_str(fu_raw.get("binary"), "fusion.binary", source) or "",
+        ),
     )

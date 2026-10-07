@@ -82,6 +82,61 @@ def test_scaffold_unknown_template(tmp_path) -> None:
         scaffold_project("t", destination=tmp_path, template="toolkit")
 
 
+def test_scaffold_workflow_template(tmp_path) -> None:
+    """Test workflow template creates proper workflow integration project."""
+    root, written = scaffold_project("my_workflow", destination=tmp_path, template="workflow")
+
+    assert (root / "manifest.json").exists()
+    assert (root / "my_workflow" / "__init__.py").is_file()
+    assert (root / "my_workflow" / "workflow.py").is_file()
+    assert (root / "my_workflow_workflow.py").is_file()
+    assert (root / "tests" / "test_smoke.py").is_file()
+    assert not (root / "manifest.xml").exists()
+
+    manifest = load_manifest(root / "manifest.json")
+    assert manifest.name == "my_workflow"
+    assert manifest.kind == "workflow"
+    assert manifest.is_workflow is True
+    # A workflow integration is loaded from Resolve's Workflow Integration
+    # Plugins directory, not the Scripts root, so it declares no `targets` —
+    # there is no WorkflowIntegrations folder under Fusion/Scripts.
+    assert manifest.targets == []
+    assert manifest.workflow.id == "com.resolvescript.myworkflow"
+    assert manifest.workflow.name == "My Workflow"
+    assert manifest.workflow.entrypoint == "my_workflow.workflow:INTEGRATION"
+
+
+def test_scaffold_pydavinci_template(tmp_path) -> None:
+    """Test pydavinci template creates project with pydavinci dependency."""
+    root, written = scaffold_project("my_tool", destination=tmp_path, template="pydavinci")
+
+    assert (root / "manifest.json").exists()
+    manifest = load_manifest(root / "manifest.json")
+    assert "pydavinci>=0.2.3" in manifest.dependencies
+
+
+def test_scaffold_davinci_rest_template(tmp_path) -> None:
+    """Test davinci-rest template creates project with davinci-rest dependency."""
+    root, written = scaffold_project("my_tool", destination=tmp_path, template="davinci-rest")
+
+    assert (root / "manifest.json").exists()
+    manifest = load_manifest(root / "manifest.json")
+    assert "davinci-rest>=0.2.5" in manifest.dependencies
+
+
+def test_scaffold_lua_template(tmp_path) -> None:
+    """Test lua template creates Lua script project."""
+    root, written = scaffold_project("my_lua", destination=tmp_path, template="lua")
+
+    assert (root / "manifest.json").exists()
+    assert (root / "my_lua_main.lua").is_file()
+    assert not (root / "my_lua.py").is_file()  # No Python entry
+
+    manifest = load_manifest(root / "manifest.json")
+    assert manifest.consolidate.enabled is False
+    assert manifest.python == ""  # No Python package
+
+
 def test_cli_create_end_to_end(tmp_path, capsys) -> None:
     assert main(["create", "cli_ext", "--dir", str(tmp_path)]) == 0
     out = capsys.readouterr().out

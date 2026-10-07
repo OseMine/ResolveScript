@@ -129,6 +129,49 @@ Installs drop into each OS's Resolve Scripts root under the manifest `targets`. 
 
 `resolvescript` ships a mock `DaVinciResolveScript` module with a faithful-enough Resolve color/editing/page object model for testing, plus `resolvescript test --api-coverage` to report which mock methods your tests actually exercise.
 
+### `ResolveScript.ui` — a declarative UI framework
+
+A modern, reactive UI framework for Resolve tools. Screens are described as
+plain Python (or dicts/JSON, or classes) and mounted onto real `UIManager`
+elements — or onto a headless mirror, so the same code runs in a test with no
+Resolve installed.
+
+```python
+from ResolveScript.ui import (
+    Window, Column, Row, Button, TextField, Tree, Value, rows, call, run
+)
+
+sequence = Value("Sequence 01")
+clips = list(media_pool.GetRootFolder().GetClipList())
+
+run(Window("Batch Renderer", children=[
+    Column(
+        Row(TextField(value=sequence), Button("Render", variant="primary"), gap="sm"),
+        Tree(["Clip", "Type"], rows(clips, "GetName", call("GetClipProperty", "Type"))),
+        gap="md", padding="md",
+    )
+]))
+```
+
+- **Three authoring modes** — composition functions, dicts/JSON, or
+  class-based `Component`s. They all produce the same tree and mix freely.
+- **Retained rendering** — keyed reconciliation patches individual native
+  properties, so focus, caret position, scroll offset, selection and tree
+  expansion survive updates. No full re-render.
+- **Tables without boilerplate** — `rows()` derives `Tree`/`List` rows from the
+  objects Resolve hands you, and `children=` recurses, so a full media pool
+  browser is one call.
+- **Two-way binding** — bind a `Value` to any control and it reads *and* writes.
+  `TwoWay(read=..., write=...)` handles stored/native representation differences.
+- **Real theming** — Qt stylesheets with hover, pressed, focus and disabled
+  states; light and dark ship ready-made and cascade through subtrees.
+- **Native escape hatch** — anything not wrapped is one `native(...)` call away
+  and mixes with framework widgets in the same container.
+- **Testable headlessly** — `MockBackend` mirrors the element tree; `require`,
+  `fire`, `type_into`, `rows` and friends make UI tests short and precise.
+
+Full guide: [`docs/ui.md`](docs/ui.md).
+
 ## Library API
 
 `ResolveScript` is a first-class Python package — import it in any script:
@@ -162,6 +205,7 @@ Every name exported at the package root is also available from its owning submod
 - `ResolveScript.sandbox` — mock Resolve API, smoke runs, REPL
 - `ResolveScript.sources` — archive/GitHub/known-source helpers
 - `ResolveScript.install` — install, registry, target resolution
+- `ResolveScript.ui` — declarative, reactive UI framework (see [`docs/ui.md`](docs/ui.md))
 
 Version: `rs.get_version()` returns the installed version string.
 
