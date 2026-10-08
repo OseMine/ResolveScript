@@ -114,6 +114,8 @@ jobs:
       is-hotfix: ${{ steps.set-version.outputs.is-hotfix }}
       is-prerelease: ${{ steps.set-version.outputs.is-prerelease }}
       pre-type: ${{ steps.set-version.outputs.pre-type }}
+      is-draft: ${{ steps.set-version.outputs.is-draft }}
+      is-dry-run: ${{ steps.set-version.outputs.is-dry-run }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
