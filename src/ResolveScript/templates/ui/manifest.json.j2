@@ -1,0 +1,23 @@
+{
+  "name": "@NAME@",
+  "version": "@VERSION@",
+  "author": "@AUTHOR@",
+  "description": "@DESCRIPTION@",
+  "python": "src/@NAME@/main.py",
+  "targets": [
+    "Comp",
+    "Utility"
+  ],
+  "consolidate": {
+    "enabled": true,
+    "output": "@NAME@.py",
+    "entry": "src/@NAME@/main.py",
+    "exclude": ["tests"],
+    "no_comment": ["sys", "os"]
+  },
+  "install": {
+    "as_directory": true,
+    "include": ["@NAME@_main.py", "src/@NAME@/**", "manifest.json"],
+    "exclude": ["**/__pycache__/**"]
+  }
+}

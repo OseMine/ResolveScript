@@ -90,6 +90,12 @@ _NEXT_STEPS: dict[str, tuple[str, ...]] = {
         "  resolvescript extensions add .    # install the plugin into the CLI",
         "  <plugin-command>                  # run your new command (see manifest)",
     ),
+    "ui": (
+        "  resolvescript dev     # iterate against the mock Resolve API",
+        "  resolvescript test    # run the smoke tests",
+        "  resolvescript build   # consolidate into a single file",
+        "  resolvescript install # install into DaVinci Resolve",
+    ),
 }
 _NEXT_STEPS["pydavinci"] = _NEXT_STEPS["minimal"]
 _NEXT_STEPS["davinci-rest"] = _NEXT_STEPS["minimal"]
@@ -1261,7 +1267,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", dest="fmt", action="store_const", const="json", default="json", help="generate manifest.json (default)")
     p.add_argument("--xml", dest="fmt", action="store_const", const="xml", help="generate manifest.xml")
     p.add_argument("--dir", help="parent directory to create the project in")
-    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, pydavinci, davinci-rest, lua, workflow, fuse)")
+    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, pydavinci, davinci-rest, lua, workflow, fuse, ui)")
     p.set_defaults(func=_cmd_create)
 
     p = sub.add_parser("dev", help="sandboxed dev loop / REPL against the mock Resolve API")

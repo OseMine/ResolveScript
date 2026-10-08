@@ -132,6 +132,7 @@ def scaffold_project(
         "workflow": "workflow",
         "fuse": "fuse",
         "extension": "plugin",
+        "ui": "ui",
     }
 
     if template not in template_map:

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <name>@NAME@</name>
+  <version>@VERSION@</version>
+  <author>@AUTHOR@</author>
+  <description>@DESCRIPTION@</description>
+  <python>src/@NAME@/main.py</python>
+  <targets>
+    <target>Comp</target>
+    <target>Utility</target>
+  </targets>
+  <consolidate enabled="true" output="@NAME@.py">
+    <entry>src/@NAME@/main.py</entry>
+    <exclude>tests</exclude>
+    <no_comment>sys</no_comment>
+    <no_comment>os</no_comment>
+  </consolidate>
+  <install as_directory="true">
+    <include>@NAME@_main.py</include>
+    <include>src/@NAME@/**</include>
+    <include>manifest.json</include>
+    <exclude>**/__pycache__/**</exclude>
+  </install>
+</manifest>
