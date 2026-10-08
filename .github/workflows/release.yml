@@ -23,13 +23,8 @@ on:
         required: false
         type: boolean
         default: false
-      prerelease:
-        description: "Mark the release as a pre-release"
-        required: false
-        type: boolean
-        default: false
       pre-type:
-        description: "Pre-release type (sets prerelease=true automatically)"
+        description: "Pre-release type (empty = stable release). Sets prerelease automatically."
         required: false
         type: choice
         options:
@@ -135,7 +130,6 @@ jobs:
           INPUT_VERSION="${{ github.event.inputs.version }}"
           DRY_RUN="${{ github.event.inputs.dry-run }}"
           DRAFT="${{ github.event.inputs.draft }}"
-          PRERELEASE="${{ github.event.inputs.prerelease }}"
           PRE_TYPE="${{ github.event.inputs.pre-type }}"
           HOTFIX="${{ github.event.inputs.hotfix }}"
 
@@ -184,7 +178,7 @@ jobs:
             echo "is-hotfix=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # Handle pre-release type
+          # Handle pre-release type (empty = stable release)
           if [ -n "$PRE_TYPE" ]; then
             echo "is-prerelease=true" >> "$GITHUB_OUTPUT"
             echo "pre-type=$PRE_TYPE" >> "$GITHUB_OUTPUT"
@@ -194,15 +188,6 @@ jobs:
               echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
               echo "version=$VERSION" >> "$GITHUB_OUTPUT"
               echo "::notice::Pre-release type: $PRE_TYPE -> v$VERSION"
-            fi
-          elif [ "$PRERELEASE" = "true" ]; then
-            echo "is-prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "pre-type=pre" >> "$GITHUB_OUTPUT"
-            if [[ ! "$VERSION" =~ (alpha|beta|rc|pre)[0-9]*$ ]]; then
-              VERSION="${VERSION}-pre.1"
-              echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-              echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-              echo "::notice::Pre-release mode -> v$VERSION"
             fi
           else
             echo "is-prerelease=false" >> "$GITHUB_OUTPUT"
