@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..errors import ResolveScriptError
 
-class ReleaseError(RuntimeError):
+
+class ReleaseError(ResolveScriptError, RuntimeError):
     pass
 
 
@@ -22,7 +24,7 @@ class ReleaseSpec:
         owner = data.get("owner")
         repo = data.get("repo")
         return cls(
-            url=str(data.get("url", "")) or None,
+            url=str(data.get("url") or ""),
             owner=str(owner) if owner else None,
             repo=str(repo) if repo else None,
             asset=(data.get("asset") and str(data["asset"])) or None,

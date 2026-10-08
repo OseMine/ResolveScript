@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 from .consolidate import BuildConfig, ConsolidateError, config_from_manifest
+from .errors import ResolveScriptError
 from .manifest.model import Manifest
 
 __all__ = [
@@ -27,7 +28,7 @@ __all__ = [
 ]
 
 
-class InstallerTemplateError(Exception):
+class InstallerTemplateError(ResolveScriptError):
     """Raised when the installer template cannot be rendered."""
 
 

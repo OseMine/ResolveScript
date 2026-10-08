@@ -32,6 +32,7 @@ import platform
 from pathlib import Path
 
 from ..config import ENV_FUSES_ROOT, ENV_FUSION_PLUGINS_ROOT, resolve_env
+from ..errors import ResolveScriptError
 
 __all__ = [
     "FUSES_DIR_NAME",
@@ -53,7 +54,7 @@ _FUSION = "Fusion"
 _RESOLVE = "DaVinci Resolve"
 
 
-class FusionPathError(Exception):
+class FusionPathError(ResolveScriptError):
     """Raised when no Fuses or Plugins directory can be determined."""
 
 

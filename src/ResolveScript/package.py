@@ -13,12 +13,13 @@ import tarfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .errors import ResolveScriptError
 from .install.installer import select_files
 from .manifest.model import Manifest
 from .manifest.validation import validate_manifest
 
 
-class PackageError(RuntimeError):
+class PackageError(ResolveScriptError, RuntimeError):
     pass
 
 

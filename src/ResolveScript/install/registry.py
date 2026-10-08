@@ -14,13 +14,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..errors import ResolveScriptError
+
 REGISTRY_REL = Path(".resolvescript") / "install.json"
 SCHEMA_VERSION = 1
 
 EMPTY_REGISTRY: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "extensions": {}}
 
 
-class RegistryError(Exception):
+class RegistryError(ResolveScriptError):
     pass
 
 

@@ -55,6 +55,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..errors import ResolveScriptError
+
 __all__ = [
     "DEFAULT_CATEGORY",
     "TOOL_TYPES",
@@ -114,7 +116,7 @@ BINARY_SUFFIXES: tuple[str, ...] = (
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
-class FuseError(Exception):
+class FuseError(ResolveScriptError):
     """Raised when a fuse is declared in a way Fusion will not accept."""
 
 
@@ -360,7 +362,8 @@ class Fuse:
             # in. A source tool replaces the chain and has none, and a fuse that
             # declared its own image port keeps exactly that one.
             self.inputs.insert(0, Control("Input", id="Image", datatype="Image", main=1))
-        for port in [*self.inputs, *self.outputs]:
+        ports: list[Control | Output] = [*self.inputs, *self.outputs]
+        for port in ports:
             if port.main is not None and not isinstance(port.main, int):
                 raise FuseError(
                     f"port {port.id!r} has main={port.main!r}; LINK_Main is an integer"
@@ -388,7 +391,8 @@ class Fuse:
         This is also what a ``Process`` body may reference, which is why
         :mod:`ResolveScript.fuse.validate` can check the body for typos.
         """
-        return [port.variable for port in (*self.inputs, *self.outputs)]
+        ports: list[Control | Output] = [*self.inputs, *self.outputs]
+        return [port.variable for port in ports]
 
     def as_dict(self) -> dict[str, Any]:
         """Metadata, for manifests and for the CLI."""

@@ -7,8 +7,10 @@ modes that actually need different handling.
 
 from __future__ import annotations
 
+from ..errors import ResolveScriptError
 
-class UIError(Exception):
+
+class UIError(ResolveScriptError):
     """Base class for all UI framework errors."""
 
 

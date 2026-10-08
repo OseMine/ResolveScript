@@ -36,6 +36,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..errors import ResolveScriptError
+
 __all__ = ["CALLBACKS", "Context", "Integration", "WorkflowError"]
 
 #: The callbacks Resolve delivers to a Workflow Integration. This list is
@@ -47,7 +49,7 @@ _ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z0-9][a-z0-9-]*)+$")
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-class WorkflowError(Exception):
+class WorkflowError(ResolveScriptError):
     """Base error for the Workflow Integration framework."""
 
 

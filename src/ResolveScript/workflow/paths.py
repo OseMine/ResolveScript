@@ -18,6 +18,7 @@ import platform
 from pathlib import Path
 
 from ..config import ENV_WORKFLOWS_ROOT, resolve_env
+from ..errors import ResolveScriptError
 
 __all__ = [
     "PLUGINS_DIR_NAME",
@@ -37,7 +38,7 @@ _VENDOR = "Blackmagic Design"
 _SAMPLE_PLUGINS = ("SamplePlugin", "SamplePromisePlugin", "ScriptTestPlugin")
 
 
-class WorkflowPathError(Exception):
+class WorkflowPathError(ResolveScriptError):
     """Raised when no Workflow Integration plugins directory can be determined."""
 
 

@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 
+from .errors import ResolveScriptError
+
 WORKSPACE_FILE = "resolvescript.json"
 
+logger = logging.getLogger(__name__)
 
-class WorkspaceError(RuntimeError):
+
+class WorkspaceError(ResolveScriptError, RuntimeError):
     pass
 
 
@@ -41,6 +46,7 @@ def read_workspace(cwd: Path | None = None) -> dict:
 
 def write_workspace(data: dict, cwd: Path | None = None) -> Path:
     path = workspace_path(cwd)
+    logger.debug("writing %s", path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{WORKSPACE_FILE}.", suffix=".tmp", dir=path.parent)
     try:

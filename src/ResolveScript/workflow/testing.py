@@ -25,6 +25,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..errors import ResolveScriptError
 from ..ui.app import App
 from ..ui.backends.mock import MockBackend
 from .model import Context, Integration
@@ -32,7 +33,7 @@ from .model import Context, Integration
 __all__ = ["Harness", "HarnessError", "harness"]
 
 
-class HarnessError(Exception):
+class HarnessError(ResolveScriptError):
     """Raised when a harness is driven before it is ready."""
 
 
@@ -58,7 +59,7 @@ class Harness:
 
     backend: MockBackend = field(init=False, default=None)  # type: ignore[assignment]
     app: App | None = field(init=False, default=None)
-    context: Context = field(init=False, default=None)
+    context: Context = field(init=False, default=None)  # type: ignore[assignment]
     launched: bool = field(init=False, default=False)
     exit_code: int = field(init=False, default=0)
     delivered: list[tuple[str, str, bool]] = field(init=False, default_factory=list)

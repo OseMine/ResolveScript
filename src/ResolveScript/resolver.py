@@ -7,12 +7,14 @@ github (incl. ``name`` looked up in the known table).
 from __future__ import annotations
 
 import json
+import logging
 import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
 
+from .errors import ResolveScriptError
 from .fetch import fetch, sha256_file
 from .manifest.json_reader import load_manifest
 from .semver import SemVerError, Version
@@ -25,8 +27,10 @@ from .spec import Spec, SpecError, parse_specifier
 # (path separators, traversal like "..", URL-encoded bytes) is scrubbed.
 _UNSAFE_SLUG_CHARS = re.compile(r"[^A-Za-z0-9._-]")
 
+logger = logging.getLogger(__name__)
 
-class ResolveError(RuntimeError):
+
+class ResolveError(ResolveScriptError, RuntimeError):
     pass
 
 
@@ -75,6 +79,7 @@ def resolve_spec(
     """Resolve a specifier to a concrete, unpacked package directory."""
     cwd = cwd or Path.cwd()
     spec = parse_specifier(spec_text, cwd=cwd)
+    logger.debug("resolving %r -> kind=%s source=%s", spec_text, spec.kind, spec.source)
 
     if spec.kind == "name":
         entry = known.lookup(spec.source)
@@ -146,7 +151,10 @@ def resolve_spec(
                 f"refusing to download executable package over plaintext http: {url}"
             )
         archive = work_dir / "cache" / _slug(url)
-        if not archive.is_file():
+        if archive.is_file():
+            logger.debug("cache hit %s", archive)
+        else:
+            logger.info("downloading %s", url)
             fetch(url=url, dest=archive)
         package_dir = unpack_archive(archive, work_dir / "unpacked")
         package_dir = _require_package_root(package_dir)

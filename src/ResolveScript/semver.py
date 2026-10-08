@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .errors import ResolveScriptError
+
 _VERSION_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
@@ -12,7 +14,7 @@ _VERSION_RE = re.compile(
 )
 
 
-class SemVerError(ValueError):
+class SemVerError(ResolveScriptError, ValueError):
     pass
 
 
@@ -213,10 +215,10 @@ def matches(version: Version, range_text: str) -> bool:
             if not _comparator_matches(op, version, raw):
                 return False
         elif "-" in clause and clause.count("-") == 1:
-            lo, hi = clause.split("-")
-            if not (version >= Version.parse(_core_only(lo))):
+            lo_txt, hi_txt = clause.split("-")
+            if not (version >= Version.parse(_core_only(lo_txt))):
                 return False
-            if hi.strip() and not (version <= Version.parse(_core_only(hi))):
+            if hi_txt.strip() and not (version <= Version.parse(_core_only(hi_txt))):
                 return False
     return True
 

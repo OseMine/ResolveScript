@@ -15,10 +15,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .errors import ResolveScriptError
 from .manifest.model import RequiresConfig
 
 
-class PluginError(Exception):
+class PluginError(ResolveScriptError):
     """A plugin could not be loaded or installed."""
     pass
 

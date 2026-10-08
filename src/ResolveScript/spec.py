@@ -7,10 +7,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .errors import ResolveScriptError
 from .sources.archive import is_archive_path
 
 
-class SpecError(ValueError):
+class SpecError(ResolveScriptError, ValueError):
     pass
 
 

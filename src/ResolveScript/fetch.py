@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import logging
 import socket
 import tempfile
 import urllib.request
@@ -11,11 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .errors import ResolveScriptError
+
 # Maximum download size (100 MB) to prevent DoS via unbounded downloads
 _MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024
 
+logger = logging.getLogger(__name__)
 
-class FetchError(RuntimeError):
+
+class FetchError(ResolveScriptError, RuntimeError):
     pass
 
 
@@ -172,6 +177,7 @@ def fetch(
             f"{expected_sha256}, got {digest}"
         )
     dest.write_bytes(data)
+    logger.info("downloaded %s (%d bytes, sha256 %s)", url, size, digest[:12])
     return Fetched(path=dest, sha256=digest, size=size, url=url)
 
 

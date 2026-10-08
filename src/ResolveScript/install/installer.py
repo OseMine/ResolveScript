@@ -14,6 +14,7 @@ Design:
 from __future__ import annotations
 
 import hashlib
+import logging
 import py_compile
 import re
 import shutil
@@ -22,8 +23,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..errors import ResolveScriptError
 from ..manifest.model import Manifest, ManifestError
 from .registry import add_or_update_entry, get_extension, installed_at_now, read_registry
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_name(name: str) -> str:
@@ -65,7 +69,7 @@ def validate_registry_relpath(rel: str) -> str:
     return rel
 
 
-class InstallError(Exception):
+class InstallError(ResolveScriptError):
     pass
 
 
@@ -304,6 +308,14 @@ def install_package(
                     f"install would overwrite '{rel}' in '{target}' which is owned by "
                     f"'{owner}' (use --force to overwrite)"
                 )
+
+    logger.info(
+        "installing %s %s into %s (targets: %s)",
+        manifest.name,
+        manifest.version,
+        scripts_root,
+        ", ".join(targets),
+    )
 
     if options.dry_run:
         seen: set[tuple[str, str]] = set()

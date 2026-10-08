@@ -7,8 +7,10 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+from ..errors import ResolveScriptError
 
-class ArchiveError(RuntimeError):
+
+class ArchiveError(ResolveScriptError, RuntimeError):
     pass
 
 

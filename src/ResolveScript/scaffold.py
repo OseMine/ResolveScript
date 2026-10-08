@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from . import __version__
+from .errors import ResolveScriptError
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_VERSION = "0.1.0"
@@ -20,7 +21,7 @@ DEFAULT_VERSION = "0.1.0"
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-class ScaffoldError(Exception):
+class ScaffoldError(ResolveScriptError):
     pass
 
 

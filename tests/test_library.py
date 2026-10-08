@@ -53,6 +53,8 @@ FUNCTION_EXPORTS = {
 }
 
 CLASS_EXPORTS = {
+    # errors
+    "ResolveScriptError",
     # manifest
     "Compat", "ConsolidateConfig", "ExtensionConfig", "InstallConfig", "Manifest",
     "ManifestError", "Release", "Target",

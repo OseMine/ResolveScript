@@ -45,6 +45,7 @@ from html import escape as html_escape
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape as xml_escape
 
+from ..errors import ResolveScriptError
 from .model import Integration
 from .paths import native_module_source
 
@@ -82,7 +83,7 @@ def _fill(template: str, tokens: dict[str, str]) -> str:
     return text
 
 
-class PluginRenderError(Exception):
+class PluginRenderError(ResolveScriptError):
     """Raised when a plugin template cannot be rendered."""
 
 

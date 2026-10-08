@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ..errors import ResolveScriptError
 
-class ManifestError(Exception):
+
+class ManifestError(ResolveScriptError):
     """A manifest could not be parsed or normalized.
 
     Carries enough context to render ``path:line:column`` hints.

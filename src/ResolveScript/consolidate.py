@@ -9,11 +9,18 @@ that DaVinci Resolve can consume (or that ``resolvescript add`` can install).
 from __future__ import annotations
 
 import ast
+import logging
 import re
 import textwrap
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Protocol
+
+from .errors import ResolveScriptError
+from .manifest.model import ConsolidateConfig
+
+logger = logging.getLogger(__name__)
 
 STDLIB_MODULES = frozenset(
     {
@@ -36,7 +43,7 @@ STDLIB_MODULES = frozenset(
 )
 
 
-class ConsolidateError(Exception):
+class ConsolidateError(ResolveScriptError):
     """A package could not be consolidated."""
 
 
@@ -418,9 +425,9 @@ def _entry_candidates(
         return [base if base.startswith(package_name) else f"{package_name}.{base}"]
     path = normalized[:-3] if normalized.endswith(".py") else normalized
     candidates: list[str] = []
-    for base in (package_root, package_root.parent):
+    for base_path in (package_root, package_root.parent):
         try:
-            candidates.append(module_dotted_name(base / path, package_root, package_name))
+            candidates.append(module_dotted_name(base_path / path, package_root, package_name))
         except ValueError:
             continue
     return candidates
@@ -563,6 +570,8 @@ def consolidate(config: BuildConfig) -> ConsolidateResult:
     except SyntaxError as exc:
         raise ConsolidateError(f"consolidated output failed syntax check: {exc}") from exc
 
+    logger.info("consolidated %d modules -> %s (%d bytes)", len(ordered), config.output, len(text))
+
     return ConsolidateResult(
         output=config.output,
         modules=tuple(ordered),
@@ -571,9 +580,20 @@ def consolidate(config: BuildConfig) -> ConsolidateResult:
     )
 
 
+class _ManifestLike(Protocol):
+    """The slice of a Manifest that ``config_from_manifest`` actually reads."""
+
+    name: str
+    @property
+    def default_package_dir(self) -> str:
+        """Where this manifest's package lives, relative to the project root."""
+        ...  # pragma: no cover - protocol placeholder
+    consolidate: ConsolidateConfig
+
+
 def config_from_manifest(
     project_root: Path,
-    manifest: object,
+    manifest: _ManifestLike,
     output_override: Path | None = None,
 ) -> BuildConfig:
     """Build a :class:`BuildConfig` from a manifest's ``consolidate`` section.

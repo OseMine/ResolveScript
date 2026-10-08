@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
+from ..errors import ResolveScriptError
 from ..fetch import fetch, fetch_json
 from ..semver import Version, pick_best
 from .archive import unpack_archive
 
 
-class GitSourceError(RuntimeError):
+class GitSourceError(ResolveScriptError, RuntimeError):
     pass
 
 
@@ -18,6 +20,8 @@ _OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 # Safe ref pattern: alphanumeric, hyphen, underscore, dot, slash (for tags like v1.2.3)
 # No path traversal sequences, no null bytes, reasonable length
 _REF_RE = re.compile(r"^[A-Za-z0-9_.-/]{1,250}$")
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_owner_repo(value: str) -> str:
@@ -117,7 +121,10 @@ def download_github(
     from ..fetch import FetchError, sha256_file
 
     try:
-        if not archive.is_file():
+        if archive.is_file():
+            logger.debug("cache hit %s", archive)
+        else:
+            logger.info("downloading %s", url)
             fetch(url=url, dest=archive)
     except FetchError as exc:
         raise GitSourceError(str(exc)) from exc

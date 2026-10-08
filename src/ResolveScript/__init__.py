@@ -16,7 +16,8 @@ Quick start — create and inspect a new script project::
     for issue in issues:
         print(issue)
 
-    cfg = rs.config_from_manifest(root / "resolve-script.manifest.json")
+    manifest = rs.load_manifest(root / "manifest.json")
+    cfg = rs.config_from_manifest(root, manifest)
     result = rs.consolidate(cfg)
     print(result.target)      # single-file build
     print(result.sources)     # files folded into the build
@@ -79,6 +80,9 @@ from .consolidate import (
     consolidate,
     summarize,
 )
+
+# --- errors ------------------------------------------------------------
+from .errors import ResolveScriptError
 
 # --- fetch / CLI -------------------------------------------------------
 from .fetch import Fetched, FetchError, fetch, fetch_json, sha256_file
@@ -237,6 +241,8 @@ __all__ = [
     # version
     "__version__",
     "get_version",
+    # errors
+    "ResolveScriptError",
     # manifest
     "Compat",
     "ConsolidateConfig",
