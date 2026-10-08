@@ -206,19 +206,27 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.set-version.outputs.tag }}"
+          echo "Processing tag: $TAG"
+          
           # Fetch tags from remote to check existence
+          echo "Fetching remote tags..."
           git fetch origin --tags --prune
+          
           # Check if tag already exists on remote
           if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
             echo "Tag $TAG already exists on remote, skipping push"
           else
             # Create tag locally if it doesn't exist
             if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Creating tag $TAG at ${GITHUB_SHA}"
               git tag "$TAG" "${GITHUB_SHA}"
               echo "Created tag $TAG"
+            else
+              echo "Tag $TAG already exists locally"
             fi
-            # Push tag to origin
-            git push origin "$TAG"
+            # Push tag to origin with explicit refspec
+            echo "Pushing tag $TAG to origin..."
+            git push origin "refs/tags/$TAG:refs/tags/$TAG"
             echo "Pushed tag $TAG to origin"
           fi
         env:
@@ -242,15 +250,19 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ needs.determine-version.outputs.tag }}"
-          for i in {1..10}; do
+          echo "Verifying tag $TAG exists on remote..."
+          for i in {1..15}; do
             if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
-              echo "Tag $TAG found on remote"
+              echo "Tag $TAG found on remote (attempt $i/15)"
               exit 0
             fi
-            echo "Waiting for tag $TAG to propagate... ($i/10)"
-            sleep 3
+            echo "Waiting for tag $TAG to propagate... ($i/15)"
+            sleep 4
           done
-          echo "::error::Tag $TAG not found on remote after 30s"
+          echo "::error::Tag $TAG not found on remote after 60s"
+          # Debug: list all remote tags
+          echo "Available remote tags:"
+          git ls-remote --tags origin | head -20
           exit 1
 
       - name: Build release-notes prompt
