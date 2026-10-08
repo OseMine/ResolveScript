@@ -115,7 +115,7 @@ def test_exported_classes_are_classes() -> None:
 
 
 def test_version() -> None:
-    assert rs.__version__ == "1.0.2"
+    assert rs.__version__ == "1.1.0"
     assert rs.get_version() == rs.__version__
 
 

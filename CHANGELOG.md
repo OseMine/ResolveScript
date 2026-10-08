@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-08
+
 ### Added
 
 - `resolvescript doctor [--scripts-root DIR] [--json]` — self-diagnosis of
@@ -38,6 +40,13 @@ All notable changes to this project are documented here.
 - `manifest.xml` now reads the `<extension>` block (`extension_kind`,
   `commands`, `provides`, `sources`, `templates`, `hooks`, `requires`),
   bringing plugin manifests to JSON/XML parity.
+- `resolvescript clean [--dir DIR] [-v]` — removes project caches (`.resolvescript/cache`),
+  build artifacts (`dist/`), registry files (`install.json`, `.resolvescript-fuses.json`),
+  and `__pycache__` directories.
+- `resolvescript upgrade` — alias for `update`, re-resolves recorded dependencies.
+- `resolvescript create --template extension` — scaffolds a framework extension
+  (CLI plugin) with `manifest.json` (kind=extension, install.to=framework),
+  `register_commands(parser)` entry module, and plugin-ready `pyproject.toml`.
 
 ### Fixed
 
