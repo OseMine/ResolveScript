@@ -70,6 +70,12 @@ jobs:
           python -m build --wheel --sdist
 
       - name: Upload dist artifacts
+        # Exactly ONE leg uploads: all four build identical py3-none-any
+        # dists, and the consumers download with merge-multiple — four
+        # same-named files extracted into one directory raced and
+        # interleaved, corrupting the sdist (twine's "bad checksum" killed
+        # the first v1.0.2 PyPI upload). One artifact, no merge collision.
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.python-version }}

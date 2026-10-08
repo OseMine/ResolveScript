@@ -26,6 +26,10 @@ All notable changes to this project are documented here.
   subject mismatch introduced on 2026-09-29 would have failed the trusted
   publishing exchange). Verified against `pypi.org/_/oidc/mint-token`
   before this release.
+- The release workflow uploads build artifacts from a single matrix leg:
+  merging four same-named dist files from all legs raced during download
+  and corrupted the sdist, failing the first PyPI upload attempt with
+  `tarfile.ReadError: bad checksum`.
 
 ## 1.0.1 - 2026-10-08
 
