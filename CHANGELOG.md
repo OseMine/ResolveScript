@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## 1.0.2 - 2026-10-08
+
 ### Added
 
 - `release.yml` generates **AI release notes** before publishing:
@@ -16,6 +18,14 @@ All notable changes to this project are documented here.
 - `workflow_dispatch` on the release workflow gained a `dry-run` input
   (full pipeline, no publish), and its `version` input now actually selects
   the release tag instead of letting the run target the branch name.
+
+### Fixed
+
+- PyPI publishing is re-enabled: the `PYPI_PUBLISH` repository variable is
+  set and the publish job no longer declares an `environment` (an OIDC
+  subject mismatch introduced on 2026-09-29 would have failed the trusted
+  publishing exchange). Verified against `pypi.org/_/oidc/mint-token`
+  before this release.
 
 ## 1.0.1 - 2026-10-08
 

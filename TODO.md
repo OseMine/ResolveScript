@@ -228,7 +228,7 @@ JSON is primary; XML is a 1:1 equivalent reader.
 ```json
 {
   "name": "my_extension",
-  "version": "0.1.0",                       // strict semver (MAJOR.MINOR.PATCH, optional -prerelease)
+  "version": "1.0.2",                       // strict semver (MAJOR.MINOR.PATCH, optional -prerelease)
   "author": "You",
   "description": "Rotoscoping helper",
   "python": "rotoscope",                    // import name of the package (optional)
@@ -272,7 +272,7 @@ JSON is primary; XML is a 1:1 equivalent reader.
 <manifest>
   <name>my_extension</name>
   <id>io.github.ose.my_extension</id>         <!-- stable identity -->
-  <version>0.1.0</version>                   <!-- strict semver -->
+  <version>1.0.2</version>                   <!-- strict semver -->
   <author>You</author>
   <description>Rotoscoping helper</description>
   <python>rotoscope</python>                 <!-- optional import name of the package -->
@@ -369,7 +369,7 @@ only the manifest kind and install target differ.
   "templates": ["toolkit"],                   // new `create --template` flavors
   "provides": ["mocks:resolve19"],            // extra sandbox mock modules
   "requires": {
-    "resolvescript": ">=0.1.0",
+    "resolvescript": ">=1.0.2",
     "python": ">=3.9"
   },
   "install": {
@@ -697,15 +697,15 @@ anything optional becomes a plugin, not a core feature (§9).
 - [x] CHANGELOG
 
 ### M9 — Publish & docs ✔
-- [x] `python -m build` verified: `resolvescript-0.1.0.tar.gz` + `resolvescript-0.1.0-py3-none-any.whl`
+- [x] `python -m build` verified: `resolvescript-1.0.2.tar.gz` + `resolvescript-1.0.2-py3-none-any.whl`
       built cleanly; wheel installs and runs `resolvescript --version` + `create` on a fresh venv.
       CI release workflow (`release.yml`) wired: `push tags: v*` runs the shared
       `release-all` action (`language: python`) which builds the wheel, generates
       checksums and a GitHub release; PyPI publishing requires a `PYPI_ENABLED`
       repo variable and OIDC trusted publishing on pypi.org.
-- [ ] Tag `v0.1.0`; push the tag to trigger the release pipeline
+- [ ] Tag `v1.0.2`; push the tag to trigger the release pipeline
 - [x] Docs: `README.md` quickstart + manifest reference + specifier reference;
-      `CHANGELOG.md` captures the full v0.1.0 feature set
+      `CHANGELOG.md` captures the full v1.0.2 feature set
 
 ---
 

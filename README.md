@@ -26,7 +26,7 @@ Install with pip: `pip install resolvescript` (Python 3.12+).
 
 | Aspect          | Specification                     |
 | --------------- | --------------------------------- |
-| Current version | v0.1.0                            |
+| Current version | v1.0.2                            |
 | Resolve support | DaVinci Resolve Free & Studio 18+ |
 | License         | MIT                               |
 
@@ -39,7 +39,7 @@ $ resolvescript dev        # sandboxed dev loop against the mock API
 $ resolvescript test       # run the smoke tests
 $ resolvescript build      # single-file build -> dist/my_cool_tool.py
 $ resolvescript analyze    # static checks (imports, manifest, API usage)
-$ resolvescript package    # dist/my-cool-tool-0.1.0.tar.gz + SHA256SUMS.txt
+$ resolvescript package    # dist/my-cool-tool-1.0.2.tar.gz + SHA256SUMS.txt
 
 # elsewhere, consume it:
 $ resolvescript add github:example/my-cool-tool
@@ -99,7 +99,7 @@ Recorded specs live in `resolvescript.json`; use `resolvescript install --locked
 ```jsonc
 {
   "name": "my-cool-tool",          // required
-  "version": "0.1.0",              // required, semver
+  "version": "1.0.2",              // required, semver
   "author": "You",
   "description": "...",
   "python": "my_cool_tool",        // package/module name (defaults to "name")
