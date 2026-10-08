@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- `resolvescript doctor [--scripts-root DIR] [--json]` — self-diagnosis of
+  the interpreter, template package-data, Scripts root discovery, env
+  overrides, project manifest, `resolvescript.json` and the install registry.
+  Every check reports `ok`/`warn`/`fail` and the command exits 1 on failure;
+  the library form is `ResolveScript.doctor.run_checks()`.
+- Unified error taxonomy: every domain error now derives from the new
+  `ResolveScriptError` base (`rs.ResolveScriptError`), so one `except`
+  catches all library failures. Historical bases are preserved (`SpecError`
+  is still a `ValueError`, `FetchError` still a `RuntimeError`, …) and a
+  contract test enforces the base for every exported error type.
+- Library logging under the `ResolveScript.*` logger hierarchy: resolver
+  dispatch, downloads, cache hits, install steps and workspace writes are
+  visible on the CLI via `-v` (info) or `-vv` (debug).
+- `py.typed` marker (verified present in the built wheel) and a
+  `[tool.mypy]` configuration; the package type-checks clean across 71
+  source files and the release pipeline gained a `Type check` step.
+
+### Fixed
+
+- README claimed "Python 3.12+" although the package requires 3.9+ and the
+  CI matrix tests 3.9-3.12.
+- The package docstring's consolidate example referenced a non-existent
+  `resolve-script.manifest.json` and a wrong `config_from_manifest`
+  signature.
+- Latent type errors found while wiring mypy: `Fuse.variables` unpacked
+  `Control`/`Output` into a join of `object`, semver range parsing reused
+  `lo`/`hi` as both strings and versions, `analyze` reported a line number
+  from a variable whose scope didn't guarantee it, `ReleaseSpec.from_data`
+  could store `url=None` in a `str` field, and `FakeUIWidget._parent` was
+  only ever set by `AddChild`.
+
 ## 1.0.2 - 2026-10-08
 
 ### Added

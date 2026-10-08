@@ -20,7 +20,7 @@ Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.
 - `package` emits `dist/<name>-<version>.tar.gz` plus `SHA256SUMS.txt`
 - `fuse` / `plugin` scaffold, validate, build, package and install Fusion `.fuse` plugins and precompiled `.plugin` binaries
 
-Install with pip: `pip install resolvescript` (Python 3.12+).
+Install with pip: `pip install resolvescript` (Python 3.9+).
 
 
 
@@ -75,6 +75,7 @@ my-cool-tool/
 | `update [<name>]` | Re-resolve recorded deps within their ranges (`--precise X.Y.Z`, `--fix`) |
 | `remove <name>` | Uninstall and unrecord (`--no-save`) |
 | `search <query>` | Search the known sources table |
+| `doctor` | Diagnose environment, project manifest and install registry (`--json`, `--scripts-root`) |
 | `manage list\|remove` | Low-level registry operations (`--json`, `--all`) |
 
 Exit codes: `0` ok, `1` error, `2` usage.
@@ -229,6 +230,15 @@ print(rs.summarize(result, cfg))
 # package a release artifact
 pkg = rs.package_project(root)
 print(pkg.archive)
+```
+
+Every failure the library raises derives from `rs.ResolveScriptError`, so a single `except` catches them all — while the historical types keep working for existing handlers (`SpecError` is still a `ValueError`, `FetchError` still a `RuntimeError`, …):
+
+```python
+try:
+    rs.validate_manifest_or_throw(manifest)
+except rs.ResolveScriptError as exc:
+    print(f"resolvescript failed: {exc}")
 ```
 
 Every name exported at the package root is also available from its owning submodule, e.g. `rs.consolidate` mirrors `ResolveScript.consolidate.consolidate`. The major subpackages are:
