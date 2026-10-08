@@ -244,9 +244,8 @@ jobs:
     # settings, then flip Settings → Secrets and variables → Actions → Variables.
     if: >-
       github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
-      vars.PYPI_PUBLISH == 'true'
+      vars['PYPI_PUBLISH'] == 'true'
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       id-token: write
     steps:
@@ -262,3 +261,59 @@ jobs:
         with:
           packages-dir: dist/
           # Requires PyPI trusted publishing configured (OIDC)
+
+  # ---------------------------------------------------------------------
+  # TEMPORARY: mints an OIDC token and asks PyPI to exchange it, to learn
+  # which subject the registered trusted publisher accepts (with or without
+  # an environment pin). Never uploads anything. DELETE AFTER VERIFICATION.
+  # ---------------------------------------------------------------------
+  oidc-mint-no-env:
+    name: "[temp] OIDC mint (no environment)"
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Ask PyPI to exchange our OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$RUNNER_TEMP/resp.json"
+          JWT=$(curl -sfL "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r .value)
+          CODE=$(curl -s -o "$RESP" -w '%{http_code}' -X POST https://pypi.org/_/oidc/mint-token \
+            -H 'Content-Type: application/json' \
+            --data "$(jq -n --arg t "$JWT" '{token: $t}')")
+          MSG=$(jq -r '.message // .detail // empty' "$RESP" 2>/dev/null || true)
+          echo "mint-token HTTP $CODE ${MSG:-}"
+          if [ "$CODE" = "200" ]; then
+            echo "**no-env variant: HTTP 200 - ACCEPTED** (publisher has no environment pin)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**no-env variant: HTTP $CODE - rejected** (${MSG:-no message})" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  oidc-mint-with-env:
+    name: "[temp] OIDC mint (environment: pypi)"
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Ask PyPI to exchange our OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$RUNNER_TEMP/resp.json"
+          JWT=$(curl -sfL "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r .value)
+          CODE=$(curl -s -o "$RESP" -w '%{http_code}' -X POST https://pypi.org/_/oidc/mint-token \
+            -H 'Content-Type: application/json' \
+            --data "$(jq -n --arg t "$JWT" '{token: $t}')")
+          MSG=$(jq -r '.message // .detail // empty' "$RESP" 2>/dev/null || true)
+          echo "mint-token HTTP $CODE ${MSG:-}"
+          if [ "$CODE" = "200" ]; then
+            echo "**env variant: HTTP 200 - ACCEPTED** (publisher pins environment 'pypi')" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**env variant: HTTP $CODE - rejected** (${MSG:-no message})" >> "$GITHUB_STEP_SUMMARY"
+          fi
