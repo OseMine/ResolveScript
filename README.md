@@ -76,6 +76,7 @@ my-cool-tool/
 | `remove <name>` | Uninstall and unrecord (`--no-save`) |
 | `search <query>` | Search the known sources table |
 | `doctor` | Diagnose environment, project manifest and install registry (`--json`, `--scripts-root`) |
+| `clean` | Clean project caches, build artifacts, and registry files (`--dir`, `-v`) |
 | `manage list\|remove` | Low-level registry operations (`--json`, `--all`) |
 | `extensions add\|remove\|list` | Manage framework extensions (plugins) for the CLI itself (`--force`, `--json`) |
 

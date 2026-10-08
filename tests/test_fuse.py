@@ -938,45 +938,6 @@ class TestCLI:
         assert code == 0
         assert "Fuses:" in out.out and "Plugins:" in out.out
 
-    def test_plugin_install_and_list(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        binary = tmp_path / "Krokodove.plugin"
-        binary.write_bytes(b"x")
-        plugins = tmp_path / "Plugins"
-        assert self._run(
-            monkeypatch, capsys, "plugin", "install", str(binary), "--root", str(plugins)
-        )[0] == 0
-        assert (plugins / "Krokodove.plugin").is_file()
-        _, out = self._run(monkeypatch, capsys, "plugin", "list", "--root", str(plugins))
-        assert "Krokodove" in out.out
-        self._run(monkeypatch, capsys, "plugin", "uninstall", "Krokodove", "--root", str(plugins))
-        assert not (plugins / "Krokodove.plugin").exists()
-
-    def test_plugin_no_force_refuses_to_replace(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        binary = tmp_path / "Krokodove.plugin"
-        binary.write_bytes(b"x")
-        plugins = tmp_path / "Plugins"
-        self._run(monkeypatch, capsys, "plugin", "install", str(binary), "--root", str(plugins))
-        code, out = self._run(
-            monkeypatch, capsys, "plugin", "install", str(binary), "--root", str(plugins), "--no-force"
-        )
-        assert code == 1
-        assert "already exists" in out.err
-
-    def test_plugin_describe_says_it_is_compiled(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        binary = tmp_path / "Krokodove.plugin"
-        binary.write_bytes(b"x" * 8)
-        code, out = self._run(monkeypatch, capsys, "plugin", "describe", str(binary))
-        assert code == 0
-        assert "compiled file, 8 bytes" in out.out
-
-    def test_plugin_and_fuse_roots_are_reported_separately(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        monkeypatch.setenv("RESOLVESCRIPT_FUSES_ROOT", str(tmp_path / "Fuses"))
-        monkeypatch.setenv("RESOLVESCRIPT_FUSION_PLUGINS_ROOT", str(tmp_path / "Plugins"))
-        _, fuses = self._run(monkeypatch, capsys, "fuse", "root")
-        _, plugins = self._run(monkeypatch, capsys, "plugin", "root")
-        assert fuses.out.strip().endswith("Fuses")
-        assert plugins.out.strip().endswith("Plugins")
-
 
 def _write_project(tmp_path: Path, process: str = PROCESS) -> Path:
     """A scaffolded fuse project, by way of the real scaffolder.

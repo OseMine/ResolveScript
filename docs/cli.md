@@ -166,6 +166,29 @@ Merges a package directory into a single `.py` without requiring a manifest.
 
 ---
 
+### `clean` — Clean project caches and artifacts
+
+```bash
+resolvescript clean [--dir DIR] [-v]
+```
+
+Removes project caches, build artifacts, and registry files:
+
+| Target | Description |
+|--------|-------------|
+| `.resolvescript/cache` | Resolver/download cache |
+| `dist/` | Build output directory |
+| `.resolvescript/install.json` | Install registry |
+| `.resolvescript-fuses.json` / `.resolvescript-plugins.json` | Fuse/plugin registries |
+| `__pycache__/` | Python bytecode directories |
+
+| Option | Description |
+|--------|-------------|
+| `--dir DIR` | Project directory (default: current directory) |
+| `-v, --verbose` | List cleaned paths |
+
+---
+
 ## Dependency Management
 
 ### `add` — Install and record
@@ -419,34 +442,6 @@ resolvescript fuse <subcommand> [options]
 |--------|-------------|
 | `--which {Fuses,Plugins}` | Which directory (default: Fuses) |
 | `--list` | Print all candidates |
-
----
-
-## Compiled Plugins (`.plugin`)
-
-### `plugin` — Deploy compiled plugins
-
-```bash
-resolvescript plugin <subcommand> [options]
-```
-
-| Subcommand | Description |
-|------------|-------------|
-| `install <path>` | Deploy `.plugin` to Plugins directory |
-| `describe <path>` | Show plugin info |
-| `list` | List installed plugins |
-| `uninstall <name>` | Remove plugin |
-| `root` | Print Plugins directory |
-
-**Install options:**
-| Option | Description |
-|--------|-------------|
-| `--root DIR` | Override Plugins directory |
-| `--name NAME` | Install name (default: filename) |
-| `--target FILENAME` | Target filename |
-| `--notes TEXT` | Free-text notes |
-| `--dry-run` | Report without copying |
-| `--no-force` | Fail if target exists |
 
 ---
 

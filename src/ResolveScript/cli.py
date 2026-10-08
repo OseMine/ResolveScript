@@ -31,7 +31,6 @@ from .fuse import (
     Fuse,
     FuseError,
     FusionPathError,
-    install_binary,
     package_fuse,
     render_fuse,
 )
@@ -227,6 +226,59 @@ def _cache_dir(cwd: Path) -> Path:
     path = cwd / ".resolvescript" / "cache"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _cmd_clean(args: argparse.Namespace) -> int:
+    """Clean project caches and build artifacts."""
+    cwd = Path(args.dir).expanduser().resolve() if args.dir else Path.cwd()
+    cleaned: list[str] = []
+
+    # .resolvescript/cache
+    cache_dir = cwd / ".resolvescript" / "cache"
+    if cache_dir.exists():
+        import shutil
+        shutil.rmtree(cache_dir)
+        cleaned.append(str(cache_dir))
+
+    # dist/
+    dist_dir = cwd / "dist"
+    if dist_dir.exists():
+        import shutil
+        shutil.rmtree(dist_dir)
+        cleaned.append(str(dist_dir))
+
+    # .resolvescript/install.json (install registry)
+    install_registry = cwd / ".resolvescript" / "install.json"
+    if install_registry.exists():
+        install_registry.unlink()
+        cleaned.append(str(install_registry))
+
+    # .resolvescript-fuses.json (fuse/plugin registry)
+    for reg_name in (".resolvescript-fuses.json", ".resolvescript-plugins.json"):
+        reg_path = cwd / reg_name
+        if reg_path.exists():
+            reg_path.unlink()
+            cleaned.append(str(reg_path))
+
+    # __pycache__ directories
+    pycache_count = 0
+    for pycache in cwd.rglob("__pycache__"):
+        import shutil
+        shutil.rmtree(pycache)
+        pycache_count += 1
+    if pycache_count:
+        cleaned.append(f"{pycache_count} __pycache__ director{'y' if pycache_count == 1 else 'ies'}")
+
+    if args.verbose:
+        if cleaned:
+            print("Cleaned:")
+            for item in cleaned:
+                print(f"  {item}")
+        else:
+            print("Nothing to clean.")
+    else:
+        print(f"Cleaned {len(cleaned)} item{'s' if len(cleaned) != 1 else ''}." if cleaned else "Nothing to clean.")
+    return 0
 
 
 def _materialize(spec_text: str, *, cwd: Path | None = None):
@@ -1026,72 +1078,6 @@ def _cmd_fuse(args: argparse.Namespace, action: str) -> int:
     return 0
 
 
-def _cmd_plugin(args: argparse.Namespace, action: str) -> int:
-    """Dispatch a ``resolvescript plugin <action>`` subcommand.
-
-    Every subcommand here *deploys* a compiled plugin. None of them build one:
-    a ``.plugin`` is a native binary or platform bundle, and there is no source
-    form this tool could compile it from.
-    """
-    which = PLUGINS_DIR_NAME
-    if action == "root":
-        if args.list:
-            print(f"{which}:")
-            for path in fuse_candidates(which):
-                print(f"  {'*' if path.is_dir() else ' '} {path}")
-            return 0
-        try:
-            print(_fuse_target(args, which))
-        except FusionPathError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if action == "list":
-        try:
-            target = _fuse_target(args, which)
-        except FusionPathError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        print("\n".join(describe_fuses_installed(target, kind="plugin")))
-        return 0
-
-    if action == "uninstall":
-        try:
-            target = _fuse_target(args, which)
-        except FusionPathError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        removed = uninstall_fuse(args.name, target, kind="plugin")
-        print("\n".join(removed) or f"'{args.name}' was not installed")
-        return 0
-
-    try:
-        plugin = _fuse_binary(args, args.path)
-    except FuseError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-
-    if action == "describe":
-        print("\n".join(plugin.describe()))
-        return 0
-
-    try:
-        target = _fuse_target(args, which)
-    except FusionPathError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    try:
-        result = install_binary(
-            plugin, target, dry_run=args.dry_run, overwrite=not args.no_force
-        )
-    except FuseError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print("\n".join(result.describe()))
-    return 0
-
-
 def _wf_add_source(sp: argparse.ArgumentParser) -> None:
     """Options for a workflow subcommand that has to import the project."""
     sp.add_argument(
@@ -1332,6 +1318,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fix", action="store_true", help="realign installed versions to manifest compat")
     p.set_defaults(func=_cmd_update)
 
+    # Alias for update
+    p = sub.add_parser("upgrade", help="alias for update")
+    p.add_argument("name", nargs="?", help="upgrade only this dependency")
+    p.add_argument("--scripts-root", help="override OS-detected Scripts root / RESOLVESCRIPT_SCRIPTS_ROOT")
+    p.add_argument("--precise", help="pin an exact version")
+    p.add_argument("--fix", action="store_true", help="realign installed versions to manifest compat")
+    p.set_defaults(func=_cmd_update)
+
     p = sub.add_parser("remove", help="uninstall a Resolve script and unrecord it")
     p.add_argument("name", help="installed extension name")
     p.add_argument("--scripts-root", help="override OS-detected Scripts root / RESOLVESCRIPT_SCRIPTS_ROOT")
@@ -1346,6 +1340,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scripts-root", help="override OS-detected Scripts root / RESOLVESCRIPT_SCRIPTS_ROOT")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=_cmd_doctor)
+
+    p = sub.add_parser("clean", help="clean project caches, build artifacts, and registry files")
+    p.add_argument("--dir", help="project directory (default: cwd)")
+    p.add_argument("-v", "--verbose", action="store_true", help="list cleaned paths")
+    p.set_defaults(func=_cmd_clean)
 
     p = sub.add_parser("consolidate", help="merge a package directory into a single .py (no manifest needed)")
     p.add_argument("package_dir", help="package directory to consolidate")
@@ -1462,42 +1461,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp = fu.add_parser("describe", help="print the fuse's metadata")
     _fuse_add_source(sp)
     sp.set_defaults(func=partial(_cmd_fuse, action="describe"))
-
-    p = sub.add_parser(
-        "plugin",
-        help="deploy compiled Fusion plugins (.plugin) — never builds them",
-    )
-    pl = p.add_subparsers(dest="plugin_command", metavar="<plugin>", required=True)
-
-    sp = pl.add_parser("install", help="copy a prebuilt .plugin into the Plugins directory")
-    sp.add_argument("path", help="the .plugin file or bundle to deploy")
-    sp.add_argument("--name", help="name to record it under (default: the file name)")
-    sp.add_argument("--target", help="installed file name, when it must differ")
-    sp.add_argument("--notes", help="free text carried into 'plugin list'")
-    _fuse_add_root(sp, PLUGINS_DIR_NAME)
-    sp.add_argument("--dry-run", action="store_true", help="report without copying")
-    sp.add_argument(
-        "--no-force", action="store_true", help="fail if the target already exists"
-    )
-    sp.set_defaults(func=partial(_cmd_plugin, action="install"))
-
-    sp = pl.add_parser("describe", help="print what is known about a .plugin")
-    sp.add_argument("path", help="the .plugin file or bundle")
-    sp.set_defaults(func=partial(_cmd_plugin, action="describe"))
-
-    sp = pl.add_parser("list", help="list installed compiled plugins")
-    _fuse_add_root(sp, PLUGINS_DIR_NAME)
-    sp.set_defaults(func=partial(_cmd_plugin, action="list"))
-
-    sp = pl.add_parser("uninstall", help="remove an installed compiled plugin")
-    sp.add_argument("name", help="the name it was installed under")
-    _fuse_add_root(sp, PLUGINS_DIR_NAME)
-    sp.set_defaults(func=partial(_cmd_plugin, action="uninstall"))
-
-    sp = pl.add_parser("root", help="print the Fusion Plugins directory")
-    _fuse_add_root(sp, PLUGINS_DIR_NAME)
-    sp.add_argument("--list", action="store_true", help="print every known candidate")
-    sp.set_defaults(func=partial(_cmd_plugin, action="root"))
 
     p = sub.add_parser("manage", help="low-level install registry operations")
     manage = p.add_subparsers(dest="manage_command", metavar="<manage>", required=True)
