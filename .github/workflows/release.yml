@@ -219,7 +219,7 @@ jobs:
       - name: Create GitHub Release
         # dry-run dispatch stops here: everything above ran, nothing is published
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run) }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
           name: Release ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
