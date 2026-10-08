@@ -116,7 +116,7 @@ def no_op(event: Any = None) -> None:
     return
 
 
-def adapt(handler: Callable[..., Any]) -> Callable[[Mapping[str, Any]], Any]:
+def adapt(handler: Callable[..., Any]) -> Callable[..., Any]:
     """Wrap a user handler so it receives a single :class:`Event`.
 
     Handlers declaring zero parameters are called with no arguments; handlers

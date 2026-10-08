@@ -291,7 +291,7 @@ class Theme:
         return f"<Theme {self.name!r} mode={self.mode!r}>"
 
 
-_FONT_SIZES = {
+_FONT_SIZES: dict[str, dict[str, Any]] = {
     "xs": {"point_size": 9},
     "sm": {"point_size": 10},
     "md": {"point_size": 11},

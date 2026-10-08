@@ -34,6 +34,9 @@ class _EventSlot:
 
     __slots__ = ("_handlers", "_element_id")
 
+    _handlers: dict[tuple[str, str], Callable[..., Any]]
+    _element_id: str
+
     def __init__(self, handlers: dict[tuple[str, str], Callable[..., Any]], element_id: str):
         object.__setattr__(self, "_handlers", handlers)
         object.__setattr__(self, "_element_id", element_id)
@@ -62,6 +65,8 @@ class _OnNamespace:
     """``win.On`` — the per-element event router of a root window."""
 
     __slots__ = ("_handlers",)
+
+    _handlers: dict[tuple[str, str], Callable[..., Any]]
 
     def __init__(self, handlers: dict[tuple[str, str], Callable[..., Any]]):
         object.__setattr__(self, "_handlers", handlers)
@@ -289,6 +294,9 @@ class MockElement:
 class MockUIManager:
     """Stand-in for ``fusion.UIManager``: a factory of elements by name."""
 
+    _backend: MockBackend
+    _strict: bool
+
     def __init__(self, backend: MockBackend, strict: bool = True):
         object.__setattr__(self, "_backend", backend)
         object.__setattr__(self, "_strict", strict)
@@ -321,6 +329,9 @@ class MockUIManager:
 
 class MockUIDispatcher:
     """Stand-in for ``bmd.UIDispatcher``: creates roots and owns the event loop."""
+
+    _ui: MockUIManager
+    _backend: MockBackend
 
     def __init__(self, ui: MockUIManager, backend: MockBackend):
         object.__setattr__(self, "_ui", ui)

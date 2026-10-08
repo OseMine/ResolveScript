@@ -306,6 +306,7 @@ class Renderer:
             raise ElementError(
                 "the root node must be a window or dialog Node, not a Raw escape hatch"
             )
+        assert isinstance(node, Node)
         if node.kind not in ("window", "dialog"):
             raise ElementError(
                 f"the root node must be 'window' or 'dialog', got {node.kind!r}. "
@@ -372,6 +373,7 @@ class Renderer:
         if isinstance(node, Raw):
             return self._mount_raw(node, root, parent)
 
+        assert isinstance(node, Node)
         assert spec is not None
         theme = self._theme_for(node.props, parent)
         self._validate(spec, node.props)
@@ -926,7 +928,7 @@ class Renderer:
     # Helpers
     # ------------------------------------------------------------------
     def _spec_of(self, node: NodeBase) -> WidgetSpec | None:
-        return None if isinstance(node, Raw) else get_spec(node.kind)
+        return get_spec(node.kind) if isinstance(node, Node) else None
 
     def _native_type(
         self, spec: WidgetSpec, props: Mapping[str, Any], axis: str | None

@@ -99,6 +99,11 @@ class NodeBase:
     key: str | None
     children: tuple[NodeBase, ...]
 
+    @property
+    def id(self) -> str:
+        """The reconciliation key; both subclasses provide it."""
+        raise NotImplementedError  # pragma: no cover
+
     def __iter__(self) -> Iterator[NodeBase]:
         return iter(self.children)
 

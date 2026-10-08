@@ -221,6 +221,8 @@ def _children(item: Any, options: _Options) -> list[dict[str, Any]]:
     an item that happens to *be* a mapping is a rare enough shape, and the
     caller can always disambiguate by building the rows explicitly.
     """
+    if options.children is None:
+        return []
     kids = _read(item, options.children)
     if not kids:
         return []

@@ -28,10 +28,12 @@ classifiers = [
 dev = [
     "pytest>=7",
     "ruff>=0.16.10",
+    "mypy>=1.8",
 ]
 test = [
     "pytest>=7",
     "ruff>=0.16.10",
+    "mypy>=1.8",
 ]
 
 [project.scripts]
@@ -42,7 +44,7 @@ where = ["src"]
 include = ["ResolveScript*"]
 
 [tool.setuptools.package-data]
-"ResolveScript" = ["templates/**/*"]
+"ResolveScript" = ["templates/**/*", "py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -61,3 +63,14 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.mypy]
+# No python_version: each CI matrix leg type-checks against the stdlib it
+# runs on (newer mypy also no longer accepts an EOL 3.9 target).
+files = ["src/ResolveScript"]
+# The framework is intentionally stdlib-only, but keep import following quiet
+# for optional peers and for the placeholder-laden scaffold templates.
+ignore_missing_imports = true
+exclude = ["src/ResolveScript/templates"]
+show_error_codes = true
+warn_unused_configs = true

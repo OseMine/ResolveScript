@@ -163,8 +163,10 @@ def _unused_imports(tree: ast.AST, rel: Path, analysis: Analysis) -> None:
     )
     for node in ast.walk(tree):
         aliases: list[ast.alias] = []
+        lineno = 0
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             aliases = node.names
+            lineno = node.lineno
         for alias in aliases:
             name = alias.asname or (alias.name.split(".")[0])
             if name == "*":
@@ -178,7 +180,7 @@ def _unused_imports(tree: ast.AST, rel: Path, analysis: Analysis) -> None:
                         "UNUSED_IMPORT",
                         "warning",
                         rel.as_posix(),
-                        node.lineno,
+                        lineno,
                         f"imported name '{name}' is never used",
                     )
                 )

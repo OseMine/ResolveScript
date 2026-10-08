@@ -260,7 +260,7 @@ class FakeSpline:
 
 class FakeStroke:
     def __init__(self, number: int):
-        self._attrs = {
+        self._attrs: dict[str, Any] = {
             "TOOLS_Name": f"Stroke_{number}",
             "BrushType": "Stroke",
             "BrushColor": (1.0, 1.0, 1.0, 1.0),
@@ -287,7 +287,7 @@ class FakeStroke:
 
 class FakeTool:
     def __init__(self, regid: str, name: str, x: float, y: float):
-        self._attrs = {
+        self._attrs: dict[str, Any] = {
             "TOOLS_Name": name,
             "TOOLS_RegID": regid,
             "TOOLS_PosX": x,
@@ -451,11 +451,12 @@ class FakeUIManager:
 class FakeUIWidget:
     """Base class for all mock UI widgets."""
 
-    def __init__(self, **kwargs):
-        self._attrs = kwargs
+    def __init__(self, **kwargs: Any) -> None:
+        self._attrs: dict[str, Any] = kwargs
         self.ID = self._generate_id()
-        self._children = []
-        self._event_handlers = {}
+        self._children: list[FakeUIWidget] = []
+        self._parent: FakeUIWidget | None = None
+        self._event_handlers: dict[str, Any] = {}
         self._visible = True
 
     def _generate_id(self) -> str:
@@ -601,7 +602,7 @@ class FakeWorkflowIntegration:
         self.hotkey = ""
         self.toolbar = True
         self._visible = False
-        self._callbacks = {}
+        self._callbacks: dict[str, Any] = {}
 
     def Show(self) -> None:
         self._visible = True
@@ -626,7 +627,7 @@ class FakeResolveWithWorkflow(FakeResolve):
 
     def __init__(self, project_manager: Any):
         super().__init__(project_manager)
-        self._workflows = {}
+        self._workflows: dict[str, FakeWorkflowIntegration] = {}
 
     def GetWorkflowIntegration(self, name: str) -> FakeWorkflowIntegration:
         if name not in self._workflows:
