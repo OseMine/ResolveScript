@@ -197,6 +197,26 @@ jobs:
           echo "is-draft=$DRAFT" >> "$GITHUB_OUTPUT"
           echo "is-dry-run=$DRY_RUN" >> "$GITHUB_OUTPUT"
 
+      # Push the git tag for workflow_dispatch (not needed for tag push)
+      - name: Push git tag
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.set-version.outputs.tag }}"
+          # Check if tag already exists locally or remotely
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally"
+          else
+            git tag "$TAG" "${GITHUB_SHA}"
+            echo "Created tag $TAG"
+          fi
+          # Push tag to origin
+          git push origin "$TAG"
+          echo "Pushed tag $TAG to origin"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
     name: Create Release
     needs: [build-and-test, determine-version]
@@ -379,15 +399,17 @@ jobs:
   pypi-publish:
     name: Publish to PyPI
     needs: [build-and-test, release, determine-version]
-    # Publishes only for v* tag pushes when the PYPI_PUBLISH repository
-    # variable is "true" (currently set). Trusted publishing (OIDC) was
-    # verified on 2026-10-08: PyPI accepts the exchange without an
-    # environment pin, so no environment is declared on this job.
+    # Publishes for:
+    # - v* tag pushes (original behavior)
+    # - workflow_dispatch (when not dry-run, not draft, not prerelease)
+    # Trusted publishing (OIDC) was verified on 2026-10-08.
     if: >-
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') ||
+       github.event_name == 'workflow_dispatch') &&
       vars['PYPI_PUBLISH'] == 'true' &&
       needs.determine-version.outputs.is-prerelease == 'false' &&
-      needs.determine-version.outputs.is-draft == 'false'
+      needs.determine-version.outputs.is-draft == 'false' &&
+      needs.determine-version.outputs.is-dry-run == 'false'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
