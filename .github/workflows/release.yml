@@ -204,16 +204,21 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.set-version.outputs.tag }}"
-          # Check if tag already exists locally or remotely
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists locally"
+          # Fetch tags from remote to check existence
+          git fetch origin --tags --prune
+          # Check if tag already exists on remote
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
+            echo "Tag $TAG already exists on remote, skipping push"
           else
-            git tag "$TAG" "${GITHUB_SHA}"
-            echo "Created tag $TAG"
+            # Create tag locally if it doesn't exist
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              git tag "$TAG" "${GITHUB_SHA}"
+              echo "Created tag $TAG"
+            fi
+            # Push tag to origin
+            git push origin "$TAG"
+            echo "Pushed tag $TAG to origin"
           fi
-          # Push tag to origin
-          git push origin "$TAG"
-          echo "Pushed tag $TAG to origin"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
