@@ -236,6 +236,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Verify the tag exists on remote before creating release (with retry)
+      - name: Verify tag exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.determine-version.outputs.tag }}"
+          for i in {1..10}; do
+            if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
+              echo "Tag $TAG found on remote"
+              exit 0
+            fi
+            echo "Waiting for tag $TAG to propagate... ($i/10)"
+            sleep 3
+          done
+          echo "::error::Tag $TAG not found on remote after 30s"
+          exit 1
+
       - name: Build release-notes prompt
         id: prompt
         shell: bash
