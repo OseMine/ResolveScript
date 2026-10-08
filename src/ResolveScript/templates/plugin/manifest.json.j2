@@ -1,0 +1,26 @@
+{
+  "name": "@NAME@",
+  "version": "@VERSION@",
+  "author": "@AUTHOR@",
+  "description": "@DESCRIPTION@",
+  "kind": "extension",
+  "entrypoint": "@NAME@.py",
+  "release": {
+    "owner": "@GITHUB_OWNER@",
+    "repo": "@NAME_KEBAB@"
+  },
+  "consolidate": {
+    "enabled": false
+  },
+  "install": {
+    "to": "framework"
+  },
+  "extension": {
+    "extension_kind": "commands",
+    "commands": ["@NAME_KEBAB@-cmd"],
+    "requires": {
+      "resolvescript": ">=@RESOLVESCRIPT_VERSION@",
+      "python": ">=3.9"
+    }
+  }
+}

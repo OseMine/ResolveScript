@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <name>@NAME@</name>
+  <version>@VERSION@</version>
+  <author>@AUTHOR@</author>
+  <description>@DESCRIPTION@</description>
+  <kind>extension</kind>
+  <entrypoint>@NAME@.py</entrypoint>
+  <release>
+    <owner>@GITHUB_OWNER@</owner>
+    <repo>@NAME_KEBAB@</repo>
+  </release>
+  <consolidate enabled="false" />
+  <install to="framework" />
+  <extension extension_kind="commands">
+    <commands>@NAME_KEBAB@-cmd</commands>
+    <requires>
+      <resolvescript>>=@RESOLVESCRIPT_VERSION@</resolvescript>
+      <python>>=3.9</python>
+    </requires>
+  </extension>
+</manifest>

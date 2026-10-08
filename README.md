@@ -64,7 +64,7 @@ my-cool-tool/
 
 | Command | Purpose |
 | --- | --- |
-| `create <name>` | Scaffold a new project (`--json`/`--xml`, `--template minimal\|toolkit`, `--dir`) |
+| `create <name>` | Scaffold a new project (`--json`/`--xml`, `--template minimal\|pydavinci\|davinci-rest\|lua\|workflow\|extension\|fuse`, `--dir`) |
 | `dev` | Sandboxed dev loop / REPL against the mock Resolve API (`--built` for the consolidated file, `--repl`, `--editor`) |
 | `test` | Run the project's pytest suite against the mock API (`--built`, `-k pattern`, `--api-coverage`) |
 | `analyze` | Static checks: missing entrypoint/module, syntax, unused imports, unmocked API methods, attribute typing (`--json`) |

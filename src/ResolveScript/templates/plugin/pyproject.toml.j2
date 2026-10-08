@@ -1,0 +1,35 @@
+[project]
+name = "@NAME@"
+version = "@VERSION@"
+description = "@DESCRIPTION@"
+readme = "README.md"
+authors = [{name = "@AUTHOR@"}] if "@AUTHOR@" else []
+requires-python = ">=3.9"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: ResolveScript",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["@NAME@*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+norecursedirs = ["*.egg-info", ".git", "__pycache__", "dist", "build"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = ["dist", "build"]

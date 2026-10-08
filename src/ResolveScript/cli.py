@@ -86,6 +86,11 @@ _NEXT_STEPS: dict[str, tuple[str, ...]] = {
         "  resolvescript fuse install        # into the Fusion Fuses directory",
         "  resolvescript test                # run the smoke tests",
     ),
+    "extension": (
+        "  resolvescript test                # run the smoke tests",
+        "  resolvescript extensions add .    # install the plugin into the CLI",
+        "  <plugin-command>                  # run your new command (see manifest)",
+    ),
 }
 _NEXT_STEPS["pydavinci"] = _NEXT_STEPS["minimal"]
 _NEXT_STEPS["davinci-rest"] = _NEXT_STEPS["minimal"]

@@ -57,12 +57,19 @@ def _walk_templates(root: Path) -> Iterator[Path]:
 def build_values(name: str, **overrides: str) -> dict[str, str]:
     label = name.replace("_", " ").strip()
     slug = re.sub(r"[^a-z0-9]+", "", name.lower())
+    kebab = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or name
     values = {
         "NAME": name,
         "VERSION": DEFAULT_VERSION,
         "DESCRIPTION": f"{name} — a DaVinci Resolve script built with ResolveScript",
         "AUTHOR": "",
         "RESOLVESCRIPT_VERSION": __version__,
+        # Kebab-case form of the name: CLI commands are lowercase-kebab, so a
+        # template that registers one (the plugin scaffold) needs it.
+        "NAME_KEBAB": kebab,
+        # GitHub owner for release URLs — defaults to empty, user can override
+        # with --author or by editing manifest.json after creation.
+        "GITHUB_OWNER": "",
         # Reverse-DNS id, for the things that need one (a Workflow Integration
         # becomes a plugin folder named after it) — and a readable form of the
         # name, since a package identifier is not a menu label.
@@ -109,10 +116,14 @@ def scaffold_project(
     - lua: Lua script project
     - workflow: DaVinci Resolve Workflow Integration
     - fuse: Fusion fuse (a scripted .fuse plugin)
+    - extension: ResolveScript framework extension (plugin; extends the CLI)
     """
     pkg_name = normalize_name(name)
 
-    # Map template to its directory
+    # Map template to its directory. The names differ from the directories
+    # because both kinds of "extension" (§0 terminology) claim the word:
+    # a Resolve *script* scaffold lives in templates/extension/, while a
+    # ResolveScript *extension* (plugin) scaffold lives in templates/plugin/.
     template_map = {
         "minimal": "extension",
         "pydavinci": "external/pydavinci",
@@ -120,6 +131,7 @@ def scaffold_project(
         "lua": "lua",
         "workflow": "workflow",
         "fuse": "fuse",
+        "extension": "plugin",
     }
 
     if template not in template_map:
