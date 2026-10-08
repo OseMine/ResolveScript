@@ -22,10 +22,11 @@ def test_no_command_prints_help_and_exits_usage(capsys) -> None:
     assert "usage:" in out
 
 
-def test_skeleton_command_reports_not_implemented(capsys) -> None:
-    assert main(["extensions", "list"]) == 1
-    err = capsys.readouterr().err
-    assert "not implemented" in err
+def test_extensions_list_is_wired(capsys, tmp_path, monkeypatch) -> None:
+    """`extensions list` is a real command now (M5c), not an M0 skeleton."""
+    monkeypatch.setenv("RESOLVESCRIPT_CONFIG_DIR", str(tmp_path))
+    assert main(["extensions", "list"]) == 0
+    assert "no framework extensions installed" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -36,11 +37,10 @@ def test_skeleton_command_reports_not_implemented(capsys) -> None:
         ["package", "--dist", "out"],
         ["manage", "remove", "foo"],
         ["extensions", "add", "foo"],
-        ["extensions", "list"],
     ],
 )
 def test_command_wiring(argv: list[str]) -> None:
-    assert main(argv) == 1  # skeleton: command resolves, returns error exit
+    assert main(argv) == 1  # command resolves, reports a failure exit
 
 
 def test_remove_uninstalled_reports_error(capsys) -> None:

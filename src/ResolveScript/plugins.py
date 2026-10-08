@@ -69,12 +69,16 @@ class PluginEntry:
     path: str
     manifest: PluginManifest
     installed_at: str
+    source: str = ""
+    integrity: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "version": self.version,
             "path": self.path,
+            "source": self.source,
+            "integrity": self.integrity,
             "manifest": {
                 "name": self.manifest.name,
                 "version": self.manifest.version,
@@ -112,6 +116,8 @@ class PluginEntry:
             path=data["path"],
             manifest=manifest,
             installed_at=data.get("installed_at", ""),
+            source=data.get("source", ""),
+            integrity=data.get("integrity", ""),
         )
 
 
@@ -154,7 +160,16 @@ class PluginRegistry:
 
 
 def _get_config_dir() -> Path:
-    """Return the CLI config directory (platform-specific)."""
+    """Return the CLI config directory (platform-specific).
+
+    ``RESOLVESCRIPT_CONFIG_DIR`` overrides the location (tests, portable
+    installs); otherwise ``%APPDATA%\\ResolveScript`` on Windows and
+    ``$XDG_CONFIG_HOME/ResolveScript`` (default ``~/.config/ResolveScript``)
+    elsewhere.
+    """
+    override = os.environ.get("RESOLVESCRIPT_CONFIG_DIR")
+    if override:
+        return Path(override)
     if sys.platform == "win32":
         root = os.environ.get("APPDATA") or str(Path.home())
         return Path(root) / "ResolveScript"
@@ -176,16 +191,34 @@ def discover_plugins() -> list[PluginEntry]:
     return list(_get_registry().load().values())
 
 
+def _module_name(entry: str) -> str:
+    """Normalize a manifest entry (``plugin.py``, ``pkg/plugin.py``) to an import name."""
+    name = entry.strip().replace("\\", ".")
+    while name.endswith(".py"):
+        name = name[:-3]
+    if name.endswith(".__init__"):
+        name = name[: -len(".__init__")]
+    return name.strip(".")
+
+
 def load_plugin_module(entry: PluginEntry) -> Any:
     """Import and return the plugin's entry module."""
     plugin_path = Path(entry.path)
     if not plugin_path.is_dir():
         raise PluginError(f"plugin path does not exist: {entry.path}")
 
+    module_name = _module_name(entry.manifest.entry)
+    if not module_name:
+        raise PluginError(f"plugin '{entry.name}' has an empty entry module")
+
+    # Drop any previously imported copy: after 'extensions add --force' the
+    # installed files changed, so the cached module is stale.
+    sys.modules.pop(module_name, None)
+
     # Add plugin directory to sys.path for import
     sys.path.insert(0, str(plugin_path))
     try:
-        return importlib.import_module(entry.manifest.entry)
+        return importlib.import_module(module_name)
     except ImportError as exc:
         raise PluginError(f"failed to import plugin entry '{entry.manifest.entry}': {exc}") from exc
     finally:
@@ -193,65 +226,114 @@ def load_plugin_module(entry: PluginEntry) -> Any:
 
 
 def register_plugin_commands(entry: PluginEntry, parser: Any) -> None:
-    """Register plugin's CLI commands with the main argument parser."""
+    """Register a plugin's CLI commands with the main argument parser.
+
+    The plugin's entry module must expose ``register_commands(parser)``,
+    receiving the top-level subparser action. A plugin that declares
+    ``commands`` in its manifest without providing the hook is an error so
+    misconfigured plugins surface as warnings, not silent no-ops.
+    """
     module = load_plugin_module(entry)
-    if hasattr(module, "register_commands"):
-        module.register_commands(parser)
+    register = getattr(module, "register_commands", None)
+    if callable(register):
+        register(parser)
+    elif entry.manifest.commands:
+        raise PluginError(
+            f"plugin '{entry.name}' declares commands "
+            f"{', '.join(entry.manifest.commands)} but its entry module "
+            f"{entry.manifest.entry!r} has no register_commands(parser) function"
+        )
+
+
+def _load_plugin_manifest(package_dir: Path) -> PluginManifest:
+    """Read plugin metadata from ``plugin.json`` or a ``kind="extension"`` manifest.
+
+    A plugin package resolved through the specifier pipeline carries an
+    ordinary ``manifest.json`` whose ``kind`` is ``"extension"`` (one
+    pipeline, two targets); a standalone ``plugin.json`` is accepted for
+    direct installs from a directory.
+    """
+    plugin_json = package_dir / "plugin.json"
+    if plugin_json.is_file():
+        try:
+            raw = json.loads(plugin_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise PluginError(f"corrupt plugin.json: {exc}") from exc
+        origin = "plugin.json"
+        requires_raw = raw.get("requires") or {}
+        if not isinstance(requires_raw, dict):
+            raise PluginError("plugin.json 'requires' must be an object")
+        manifest = PluginManifest(
+            name=raw.get("name", ""),
+            version=raw.get("version", ""),
+            kind=raw.get("kind", "extension"),
+            extension_kind=raw.get("extension_kind", ""),
+            provides=raw.get("provides", []),
+            commands=raw.get("commands", []),
+            sources=raw.get("sources", []),
+            hooks=raw.get("hooks", {}),
+            templates=raw.get("templates", []),
+            requires=RequiresConfig(
+                resolvescript=requires_raw.get("resolvescript", ""),
+                python=requires_raw.get("python", ""),
+            ),
+            entry=raw.get("entry", ""),
+        )
     else:
-        # Auto-discover: look for a 'cli' module or 'Command' classes
-        for cmd_name in entry.manifest.commands:
-            # Try to find the command in the module
-            if hasattr(module, cmd_name):
-                cmd_obj = getattr(module, cmd_name)
-                # Assume it's a function that returns a subparser
-                if callable(cmd_obj):
-                    # This is a simplistic auto-registration
-                    pass
+        manifest_path = package_dir / "manifest.json"
+        if not manifest_path.is_file():
+            raise PluginError(
+                f"{package_dir} has no plugin.json or manifest.json - not a plugin"
+            )
+        from .manifest import load_manifest as load_script_manifest
+
+        script = load_script_manifest(manifest_path)
+        origin = "manifest.json"
+        if script.kind != "extension":
+            raise PluginError(
+                f"'{script.name}' is a Resolve script (kind {script.kind!r}), not a "
+                "framework extension; use 'resolvescript add' to install it into Resolve"
+            )
+        ext = script.extension
+        manifest = PluginManifest(
+            name=script.name,
+            version=script.version,
+            kind="extension",
+            extension_kind=ext.extension_kind,
+            provides=list(ext.provides),
+            commands=list(ext.commands),
+            sources=list(ext.sources),
+            hooks=dict(ext.hooks),
+            templates=list(ext.templates),
+            requires=ext.requires,
+            entry=script.entrypoint or "",
+        )
+
+    if not manifest.name:
+        raise PluginError(f"{origin} missing required 'name'")
+    if not manifest.version:
+        raise PluginError(f"{origin} missing required 'version'")
+    if manifest.kind != "extension":
+        raise PluginError("only 'extension' kind is supported for plugins")
+    if not manifest.entry:
+        raise PluginError(f"{origin} missing required 'entry'")
+    return manifest
 
 
 def install_plugin(
     source_path: Path,
     *,
     force: bool = False,
+    source: str = "",
+    integrity: str = "",
 ) -> PluginEntry:
     """Install a plugin from a local directory or package.
 
-    The source must contain a plugin.json manifest at its root.
+    The source must contain a ``plugin.json`` or a ``manifest.json`` with
+    ``"kind": "extension"`` (see :func:`_load_plugin_manifest`).
     """
     source_path = source_path.resolve()
-    manifest_path = source_path / "plugin.json"
-    if not manifest_path.is_file():
-        raise PluginError(f"no plugin.json found in {source_path}")
-
-    import json
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-    # Build PluginManifest from raw JSON
-    manifest = PluginManifest(
-        name=raw.get("name", ""),
-        version=raw.get("version", ""),
-        kind=raw.get("kind", "extension"),
-        extension_kind=raw.get("extension_kind", ""),
-        provides=raw.get("provides", []),
-        commands=raw.get("commands", []),
-        sources=raw.get("sources", []),
-        hooks=raw.get("hooks", {}),
-        templates=raw.get("templates", []),
-        requires=RequiresConfig(
-            resolvescript=raw.get("requires", {}).get("resolvescript", ""),
-            python=raw.get("requires", {}).get("python", ""),
-        ),
-        entry=raw.get("entry", ""),
-    )
-
-    if not manifest.name:
-        raise PluginError("plugin.json missing required 'name'")
-    if not manifest.version:
-        raise PluginError("plugin.json missing required 'version'")
-    if manifest.kind != "extension":
-        raise PluginError("only 'extension' kind is supported for plugins")
-    if not manifest.entry:
-        raise PluginError("plugin.json missing required 'entry'")
+    manifest = _load_plugin_manifest(source_path)
 
     # Check version requirements
     manifest.check_requires()
@@ -277,6 +359,8 @@ def install_plugin(
         path=str(target_dir),
         manifest=manifest,
         installed_at=datetime.now(timezone.utc).isoformat(),
+        source=source,
+        integrity=integrity,
     )
     registry = _get_registry()
     registry.register(entry)

@@ -241,6 +241,16 @@ def install_package(
     # Validate manifest.name prevents path traversal (critical)
     _validate_name(manifest.name)
 
+    if manifest.is_plugin:
+        # A framework extension extends the CLI itself and is loaded from the
+        # CLI config dir; a copy in the Scripts root would be dead weight that
+        # Resolve never reads.
+        raise InstallError(
+            f"'{manifest.name}' is a ResolveScript framework extension (plugin), "
+            "which installs into the CLI config dir, not the Scripts root. "
+            "Run 'resolvescript extensions add <spec>' instead."
+        )
+
     if manifest.is_workflow:
         # A Workflow Integration is not a script. Resolve scans a separate
         # plugins directory for it and would never look here, so installing it

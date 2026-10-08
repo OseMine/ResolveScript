@@ -152,6 +152,72 @@ def test_plugin_manifest_kind() -> None:
     assert m.install.to == "framework"
 
 
+EXTENSION_JSON = {
+    "name": "demo-lint",
+    "version": "1.0.0",
+    "kind": "extension",
+    "entrypoint": "demo.py",
+    "release": {"owner": "acme", "repo": "demo-lint"},
+    "consolidate": {"enabled": False},
+    "install": {"to": "framework"},
+    "extension": {
+        "extension_kind": "commands",
+        "commands": ["analyze-extra"],
+        "provides": ["mocks:resolve19"],
+        "sources": ["registry:"],
+        "templates": ["toolkit"],
+        "hooks": {"pre_build": "hooks.on_pre"},
+        "requires": {"resolvescript": ">=1.0.2", "python": ">=3.9"},
+    },
+}
+
+EXTENSION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <name>demo-lint</name>
+  <version>1.0.0</version>
+  <kind>extension</kind>
+  <entrypoint>demo.py</entrypoint>
+  <release>
+    <owner>acme</owner>
+    <repo>demo-lint</repo>
+  </release>
+  <consolidate enabled="false" />
+  <install to="framework" />
+  <extension extension_kind="commands">
+    <commands>analyze-extra</commands>
+    <provides>mocks:resolve19</provides>
+    <sources>registry:</sources>
+    <templates>toolkit</templates>
+    <hooks>
+      <hook name="pre_build">hooks.on_pre</hook>
+    </hooks>
+    <requires>
+      <resolvescript>&gt;=1.0.2</resolvescript>
+      <python>&gt;=3.9</python>
+    </requires>
+  </extension>
+</manifest>
+"""
+
+
+def test_xml_extension_block_parity_with_json() -> None:
+    """A plugin manifest must normalize identically from JSON and XML."""
+    from_json = json_loads(json.dumps(EXTENSION_JSON))
+    from_xml = xml_loads(EXTENSION_XML)
+    assert from_json.to_dict() == from_xml.to_dict()
+    assert from_xml.is_plugin
+    assert from_xml.extension.extension_kind == "commands"
+    assert from_xml.extension.commands == ["analyze-extra"]
+    assert from_xml.extension.provides == ["mocks:resolve19"]
+    assert from_xml.extension.sources == ["registry:"]
+    assert from_xml.extension.templates == ["toolkit"]
+    assert from_xml.extension.hooks == {"pre_build": "hooks.on_pre"}
+    assert from_xml.extension.requires.resolvescript == ">=1.0.2"
+    assert from_xml.extension.requires.python == ">=3.9"
+    assert from_xml.install.to == "framework"
+    assert from_xml.consolidate.enabled is False
+
+
 def test_malformed_json_reports_line(tmp_path) -> None:
     path = tmp_path / "manifest.json"
     path.write_text("{\n  \"name\": \"broken\",\n  \n  \"version\": }", encoding="utf-8")

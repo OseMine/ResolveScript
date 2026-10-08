@@ -1,0 +1,25 @@
+{
+  "name": "resolvescript-lint",
+  "version": "1.0.0",
+  "description": "Example ResolveScript framework extension: adds an analyze-extra command to the resolvescript CLI",
+  "kind": "extension",
+  "entrypoint": "lint_plugin.py",
+  "release": {
+    "owner": "OseMine",
+    "repo": "resolvescript-lint"
+  },
+  "consolidate": {
+    "enabled": false
+  },
+  "install": {
+    "to": "framework"
+  },
+  "extension": {
+    "extension_kind": "commands",
+    "commands": ["analyze-extra"],
+    "requires": {
+      "resolvescript": ">=1.0.0",
+      "python": ">=3.9"
+    }
+  }
+}

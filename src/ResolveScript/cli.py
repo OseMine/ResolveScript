@@ -14,7 +14,7 @@ import logging
 import sys
 from functools import partial
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 from . import __version__
 from .consolidate import (
@@ -89,17 +89,6 @@ _NEXT_STEPS: dict[str, tuple[str, ...]] = {
 }
 _NEXT_STEPS["pydavinci"] = _NEXT_STEPS["minimal"]
 _NEXT_STEPS["davinci-rest"] = _NEXT_STEPS["minimal"]
-
-
-def _skeleton(name: str) -> Callable[[argparse.Namespace], int]:
-    """Return a stub handler until the owning milestone wires the command."""
-
-    def run(args: argparse.Namespace) -> int:
-        del args
-        print(f"resolvescript: '{name}' is not implemented yet (M0 skeleton)", file=sys.stderr)
-        return 1
-
-    return run
 
 
 def _cmd_create(args: argparse.Namespace) -> int:
@@ -235,7 +224,7 @@ def _cache_dir(cwd: Path) -> Path:
     return path
 
 
-def _materialize(spec_text: str, scripts_root: Path, *, cwd: Path | None = None):
+def _materialize(spec_text: str, *, cwd: Path | None = None):
     from .resolver import resolve_spec
 
     cwd = cwd or Path.cwd()
@@ -285,7 +274,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
 
     try:
         if args.spec:
-            resolved = _materialize(args.spec, scripts_root, cwd=cwd)
+            resolved = _materialize(args.spec, cwd=cwd)
             result = install_package(
                 resolved.package_dir,
                 resolved.manifest,
@@ -327,7 +316,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
                     errors += 1
                     continue
                 try:
-                    resolved = _materialize(spec, scripts_root, cwd=cwd)
+                    resolved = _materialize(spec, cwd=cwd)
                     result = install_package(
                         resolved.package_dir,
                         resolved.manifest,
@@ -390,7 +379,7 @@ def _cmd_add(args: argparse.Namespace) -> int:
     cwd = Path.cwd()
     scripts_root = _resolve_scripts_root(args.scripts_root)
     try:
-        resolved = _materialize(args.spec, scripts_root, cwd=cwd)
+        resolved = _materialize(args.spec, cwd=cwd)
         result = install_package(
             resolved.package_dir,
             resolved.manifest,
@@ -441,7 +430,7 @@ def _cmd_update(args: argparse.Namespace) -> int:
             continue
         pinned = _pin_spec(spec, args.precise, cwd) if args.precise else spec
         try:
-            resolved = _materialize(pinned, scripts_root, cwd=cwd)
+            resolved = _materialize(pinned, cwd=cwd)
         except ResolveError as exc:
             print(f"resolvescript: update {name}: {exc}", file=sys.stderr)
             errors += 1
@@ -497,6 +486,77 @@ def _cmd_search(args: argparse.Namespace) -> int:
     for entry in results:
         print(f"{entry['name']:20} {entry['source']}")
         print(f"    {entry['desc']}")
+    return 0
+
+
+def _cmd_ext_add(args: argparse.Namespace) -> int:
+    from .plugins import PluginError, install_plugin
+    from .resolver import ResolveError
+    from .spec import parse_specifier
+
+    cwd = Path.cwd()
+    try:
+        # A bare directory carrying only a standalone plugin.json (the §4.5
+        # shape) never enters the specifier pipeline, which requires a
+        # manifest.json package root — install it directly.
+        entry = None
+        spec = parse_specifier(args.spec, cwd=cwd)
+        if spec.kind == "path" and spec.location is not None:
+            location = spec.location
+            if (location / "plugin.json").is_file() and not (location / "manifest.json").is_file():
+                entry = install_plugin(location, force=args.force, source=spec.source)
+        if entry is None:
+            resolved = _materialize(args.spec, cwd=cwd)
+            entry = install_plugin(
+                resolved.package_dir,
+                force=args.force,
+                source=resolved.source,
+                integrity=resolved.integrity,
+            )
+    except (ResolveError, PluginError, OSError) as exc:
+        print(f"resolvescript: extensions add: {exc}", file=sys.stderr)
+        return 1
+    print(f"installed {entry.name} {entry.version} -> {entry.path}")
+    if entry.manifest.commands:
+        print(f"commands: {', '.join(entry.manifest.commands)}")
+    return 0
+
+
+def _cmd_ext_remove(args: argparse.Namespace) -> int:
+    from .plugins import PluginError, uninstall_plugin
+
+    try:
+        removed = uninstall_plugin(args.name)
+    except PluginError as exc:
+        print(f"resolvescript: extensions remove: {exc}", file=sys.stderr)
+        return 1
+    if not removed:
+        print(
+            f"resolvescript: extensions remove: '{args.name}' is not installed",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"removed {args.name}")
+    return 0
+
+
+def _cmd_ext_list(args: argparse.Namespace) -> int:
+    from .plugins import PluginError, list_plugins
+
+    try:
+        plugins = list_plugins()
+    except PluginError as exc:
+        print(f"resolvescript: extensions list: {exc}", file=sys.stderr)
+        return 1
+    if getattr(args, "json", False):
+        print(json.dumps([p.to_dict() for p in plugins], indent=2))
+        return 0
+    if not plugins:
+        print("no framework extensions installed")
+        return 0
+    for entry in sorted(plugins, key=lambda p: p.name):
+        commands = ",".join(entry.manifest.commands) or "-"
+        print(f"{entry.name:24} {entry.version:10} {commands:20} {entry.path}")
     return 0
 
 
@@ -1156,6 +1216,36 @@ def _cmd_workflow(args: argparse.Namespace, action: str) -> int:
     return 0
 
 
+def _register_plugin_commands(sub: Any) -> None:
+    """Register CLI commands contributed by installed plugins (M5c).
+
+    Failure isolation: a plugin that fails its ``requires`` gate, cannot be
+    imported, or is missing its ``register_commands`` hook is skipped with a
+    warning — loading plugins must never crash the CLI.
+    """
+    from .plugins import PluginError, discover_plugins, register_plugin_commands
+
+    try:
+        entries = discover_plugins()
+    except PluginError as exc:
+        print(f"resolvescript: warning: plugin registry unavailable: {exc}", file=sys.stderr)
+        return
+    for entry in entries:
+        try:
+            entry.manifest.check_requires()
+            register_plugin_commands(entry, sub)
+        except PluginError as exc:
+            print(
+                f"resolvescript: warning: skipping plugin '{entry.name}': {exc}",
+                file=sys.stderr,
+            )
+        except Exception as exc:  # plugin code is third-party: never crash the CLI
+            print(
+                f"resolvescript: warning: plugin '{entry.name}' failed to load: {exc}",
+                file=sys.stderr,
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="resolvescript",
@@ -1419,14 +1509,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("extensions", help="manage ResolveScript framework extensions (plugins)")
     ext = p.add_subparsers(dest="ext_command", metavar="<ext>", required=True)
     ep = ext.add_parser("add", help="install a plugin into the CLI config dir")
-    ep.add_argument("spec", help="plugin specifier")
+    ep.add_argument("spec", help="plugin specifier (a package whose manifest.json has kind=extension)")
     ep.add_argument("--force", action="store_true", help="reinstall even if present")
-    ep.set_defaults(func=_skeleton("extensions add"))
+    ep.set_defaults(func=_cmd_ext_add)
     ep = ext.add_parser("remove", help="uninstall a plugin")
     ep.add_argument("name")
-    ep.set_defaults(func=_skeleton("extensions remove"))
+    ep.set_defaults(func=_cmd_ext_remove)
     ep = ext.add_parser("list", help="list installed plugins")
-    ep.set_defaults(func=_skeleton("extensions list"))
+    ep.add_argument("--json", action="store_true", help="machine-readable output")
+    ep.set_defaults(func=_cmd_ext_list)
+
+    _register_plugin_commands(sub)
 
     return parser
 

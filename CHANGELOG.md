@@ -22,11 +22,30 @@ All notable changes to this project are documented here.
 - `py.typed` marker (verified present in the built wheel) and a
   `[tool.mypy]` configuration; the package type-checks clean across 71
   source files and the release pipeline gained a `Type check` step.
+- `resolvescript extensions add <spec> | remove <name> | list [--json]` —
+  framework-extension (plugin) management (M5c). Plugins install into the
+  CLI config directory (never into Resolve) through the same specifier
+  grammar, integrity and packaging pipeline as Resolve scripts, gated at
+  install time by `extension.requires`. Plugin commands register at CLI
+  startup via the entry module's `register_commands(parser)`; plugins that
+  fail their version gate, cannot be imported or lack the hook are skipped
+  with a warning — a broken plugin never crashes the CLI.
+- `RESOLVESCRIPT_CONFIG_DIR` overrides the CLI config directory
+  (`%APPDATA%\ResolveScript` / `~/.config/ResolveScript`) used by the
+  plugin registry.
+- `examples/resolvescript-lint` — the first-party example plugin adding an
+  `analyze-extra` command, used as the M5c end-to-end acceptance artifact.
+- `manifest.xml` now reads the `<extension>` block (`extension_kind`,
+  `commands`, `provides`, `sources`, `templates`, `hooks`, `requires`),
+  bringing plugin manifests to JSON/XML parity.
 
 ### Fixed
 
 - README claimed "Python 3.12+" although the package requires 3.9+ and the
   CI matrix tests 3.9-3.12.
+- `docs/cli.md` documented `extensions install/uninstall/enable/disable/info`
+  subcommands that never existed; it now matches the real
+  `add/remove/list` surface.
 - The package docstring's consolidate example referenced a non-existent
   `resolve-script.manifest.json` and a wrong `config_from_manifest`
   signature.

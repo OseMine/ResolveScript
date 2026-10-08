@@ -298,20 +298,47 @@ resolvescript manage <subcommand> [args...]
 
 ## Framework Extensions
 
-### `extensions` — Manage plugins
+### `extensions` — Manage framework extensions (plugins)
+
+Framework extensions extend the `resolvescript` CLI itself; they install
+into the CLI config directory and **never** into DaVinci Resolve (see the
+Resolve script vs framework extension distinction below).
 
 ```bash
-resolvescript extensions <subcommand> [args...]
+resolvescript extensions add <spec> [--force]
+resolvescript extensions remove <name>
+resolvescript extensions list [--json]
 ```
 
 | Subcommand | Description |
 |------------|-------------|
-| `list` | List available extensions |
-| `install <name>` | Install extension |
-| `uninstall <name>` | Uninstall extension |
-| `enable <name>` | Enable extension |
-| `disable <name>` | Disable extension |
-| `info <name>` | Show extension info |
+| `add <spec>` | Resolve a specifier, check its `requires` gate and install it into the CLI config dir (`--force` reinstalls) |
+| `remove <name>` | Uninstall a plugin and unregister it |
+| `list` | List installed plugins (`--json` for machine-readable output) |
+
+A plugin is an ordinary package whose `manifest.json` declares
+`"kind": "extension"` and `"install": { "to": "framework" }` — the same
+specifier grammar, SHA-256 integrity and packaging pipeline as Resolve
+scripts, only the install target differs. A standalone `plugin.json` in a
+local directory is also accepted by `extensions add`.
+
+The plugin's entry module (manifest `entrypoint`) must expose
+`register_commands(parser)`, which receives the top-level subparser action
+and adds the contributed commands — they appear in `resolvescript --help`.
+Plugins whose `extension.requires` gate fails (resolvescript or Python
+version) or that cannot be loaded are skipped with a warning at CLI
+startup; a broken plugin never crashes the CLI.
+
+**Config directory:** `%APPDATA%\ResolveScript` (Windows) or
+`~/.config/ResolveScript` (macOS/Linux); set `RESOLVESCRIPT_CONFIG_DIR` to
+override. Installed plugins are tracked in `plugins.json` next to it.
+
+```bash
+resolvescript extensions add ./examples/resolvescript-lint
+analyze-extra                              # contributed by the plugin
+resolvescript extensions list
+resolvescript extensions remove resolvescript-lint
+```
 
 ---
 

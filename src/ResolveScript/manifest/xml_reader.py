@@ -124,6 +124,38 @@ def _to_plain(root: ET.Element, source: str) -> dict[str, Any]:
             inst["exclude"] = exclude
         raw["install"] = inst
 
+    extension = root.find("extension")
+    if extension is not None:
+        ext: dict[str, Any] = {}
+        extension_kind = _attr(extension, "extension_kind") or _child(extension, "extension_kind")
+        if extension_kind is not None:
+            ext["extension_kind"] = extension_kind
+        for key in ("provides", "commands", "sources", "templates"):
+            values = _text_list(extension, key)
+            if values:
+                ext[key] = values
+        hooks: dict[str, str] = {}
+        hooks_el = extension.find("hooks")
+        if hooks_el is not None:
+            for hook in hooks_el.findall("hook"):
+                hook_name = hook.get("name")
+                value = _text(hook)
+                if hook_name and value is not None:
+                    hooks[hook_name] = value
+        if hooks:
+            ext["hooks"] = hooks
+        requires_el = extension.find("requires")
+        if requires_el is not None:
+            requires = {
+                k: v
+                for k in ("resolvescript", "python")
+                if (v := _text(requires_el.find(k))) is not None
+            }
+            if requires:
+                ext["requires"] = requires
+        if ext:
+            raw["extension"] = ext
+
     return raw
 
 

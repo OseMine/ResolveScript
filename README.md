@@ -77,6 +77,7 @@ my-cool-tool/
 | `search <query>` | Search the known sources table |
 | `doctor` | Diagnose environment, project manifest and install registry (`--json`, `--scripts-root`) |
 | `manage list\|remove` | Low-level registry operations (`--json`, `--all`) |
+| `extensions add\|remove\|list` | Manage framework extensions (plugins) for the CLI itself (`--force`, `--json`) |
 
 Exit codes: `0` ok, `1` error, `2` usage.
 
