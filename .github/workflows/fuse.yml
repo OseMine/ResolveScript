@@ -73,7 +73,7 @@ jobs:
         run: resolvescript fuse package
 
       - name: Upload Fuse Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fuse-${{ matrix.python-version }}
           path: dist/*
