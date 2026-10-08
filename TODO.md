@@ -72,6 +72,7 @@ resolvescript install <spec>             # one-off install of a single spec, no 
 resolvescript update [<name>]            # re-resolve within recorded ranges; --fix realigns Resolve/Python compat
 resolvescript remove <name>              # uninstall + unrecord (npm uninstall)
 resolvescript search <query>             # discover extensions (known list; registry index later)
+resolvescript doctor                     # diagnose interpreter, scripts root, manifests, registry (--json)
 resolvesctipt clean                      # deletes all resolvescript cache, build and extensions files
 
 resolvescript manage list                # list installed extensions (reads .resolvescript/install.json)
@@ -135,24 +136,6 @@ Name **`resolvescript`** is available on PyPI (verified 2026-09-14, 404).
 
 ---
 
-## 2. How it maps to the Rotoscope battle-tested code
-
-| Rotoscope component | Generalizes into | Command |
-|---|---|---|
-| `rotoscope/` package (core/timeline/clip/fusion/roto/utils) | becomes **template source** in `create`; framework stays API-agnostic | `create` |
-| `scripts/build.py` (collect → topo-sort → strip internal imports → hoist `__future__` → emit) | `ResolveScript/consolidate.py` | `build`, `consolidate` |
-| `dev/sandbox.py` (mock `DaVinciResolveScript`, smoke tests, REPL) | `ResolveScript/sandbox/` (reusable mock + runner) | `dev`, `test` |
-| `dev/hello_resolve.py` | template in `create` | `create` |
-| `scripts/install.py` (source/built/release modes, per-OS scripts root) | `ResolveScript/install.py` (manifest-driven) | `install` |
-| `tests/test_build.py`, `tests/test_sandbox.py` | template + `ResolveScript.testing` helpers | `create`, `test` |
-| `.github/workflows/release.yml` (build → artifact → release) | `resolvescript package` + CI template | `package` |
-
-Key generalization point: **nothing in the framework is Rotoscope-specific**
-except the mock API objects and the scaffolder templates. The consolidator,
-installer, analyzer and test runner operate on *any* manifest-defined
-extension.
-
----
 
 ## 3. Project layout (in this repo)
 
@@ -167,6 +150,8 @@ ResolveScript/
 │       ├── __init__.py               # __version__
 │       ├── cli.py                    # entry point: resolvescript
 │       ├── config.py                 # locate/read Config (manifest discovery, env)
+│       ├── errors.py                 # ResolveScriptError base for every domain error
+│       ├── doctor.py                 # `doctor` checks (library form: run_checks())
 │       ├── manifest/
 │       │   ├── __init__.py
 │       │   ├── model.py              # Manifest dataclass (name, version, targets, …)
@@ -186,7 +171,7 @@ ResolveScript/
 │       ├── registry.py               # read/write .resolvescript/install.json (lockfile)
 │       ├── workspace.py              # read/write resolvescript.json deps config
 │       ├── install.py                # author + consumer install (atomic, verified)
-│       ├── plugins.py                # framework-extension loader (plugin.json, entry points)
+│       ├── plugins.py                # framework-extension loader + registry (extensions add/remove/list)
 │       ├── manage.py                 # list / update / remove from the registry
 │       ├── analyze.py                # static checks + API/coverage report
 │       ├── package.py                # produce dist/ artifacts (+ the tarball `add` consumes)
@@ -200,17 +185,24 @@ ResolveScript/
 │       │   ├── __init__.py
 │       │   └── fixtures.py           # pytest fixtures (install mock, load built/source)
 │       ├── discovery.py              # locate Fusion Scripts root per OS
+│       ├── py.typed                  # PEP 561 marker (ships in the wheel)
 │       └── templates/
 │           ├── extension/            # `create` scaffold (package + manifest + tests + sandbox)
 │           ├── in_app_script.py.j2   # menu-style entry script template
 │           └── lua_installer.lua.j2  # optional bundled Lua installer
+├── examples/
+│   └── resolvescript-lint/           # first-party example plugin (M5c acceptance)
 ├── tests/
+│   ├── conftest.py                   # hermetic plugin-registry isolation
 │   ├── test_manifest.py
 │   ├── test_consolidate.py
 │   ├── test_install.py
 │   ├── test_sandbox.py
 │   ├── test_analyze.py
-│   └── test_cli.py
+│   ├── test_cli.py
+│   ├── test_doctor.py                # `doctor` checks
+│   ├── test_errors.py                # ResolveScriptError contract
+│   └── test_plugins.py               # M5c lifecycle, gate, failure isolation
 └── .github/
     └── workflows/
         ├── ci.yml                    # lint + test the CLI itself
@@ -467,6 +459,14 @@ anything optional becomes a plugin, not a core feature (§9).
 - Matches the built-in known-extension table + naming conventions
   (`resolvescript-ext-<name>`, `<owner>/<repo>`); later: registry index.
 
+### `resolvescript doctor [--scripts-root <dir>] [--json]`
+- Diagnoses the setup: interpreter + template package-data, Scripts root
+  discovery, `RESOLVESCRIPT_*` env overrides, project manifest validity,
+  the `resolvescript.json` workspace, and the install registry.
+- Every check reports `ok`/`warn`/`fail`; `--json` for machine-readable
+  output; exit 1 when any check fails.
+- Library form: `ResolveScript.doctor.run_checks()`.
+
 ### `resolvescript manage list | remove [--all]`
 - Low-level registry operations: `list` reads `.resolvescript/install.json`
   (name/version/source/integrity/files/targets); `manage remove` deletes tracked
@@ -475,13 +475,15 @@ anything optional becomes a plugin, not a core feature (§9).
 
 ### `resolvescript extensions add <spec> | remove <name> | list`
 - **Framework-extension (plugin) management only** — installs into the CLI
-  config dir `~/.config/resolvescript/plugins/` (or `%APPDATA%\resolvescript\`),
-  never into Resolve (§0, §4.5).
+  config dir `~/.config/ResolveScript/plugins/` (or
+  `%APPDATA%\ResolveScript\plugins\`), never into Resolve (§0, §4.5).
+  Override the config dir with `RESOLVESCRIPT_CONFIG_DIR`.
 - Same pipeline as `add` for scripts: resolve spec → download → SHA-256 verify →
   stage → check `requires.resolvescript`/`python` → write plugin dir → refresh
-  plugin registry (`config.toml` + lockfile).
+  the plugin registry (`plugins.json` next to the config dir, recording
+  source/integrity like the install registry).
 - `force`/`--force` re-installs; `remove` deletes the plugin dir + unregisters;
-  `list` shows name/version/kind/commands.
+  `list` shows name/version/commands (`--json` adds the full manifest).
 - New commands appear in `resolvescript --help`; plugins whose version gate
   fails are skipped with a warning (never crash the CLI).
 
@@ -553,26 +555,29 @@ anything optional becomes a plugin, not a core feature (§9).
 
 ## 7. Milestones & TODO checkboxes
 
-### M0 — Repo bootstrap
-- [ ] Create `src/ResolveScript/` package, `pyproject.toml` (name `resolvescript`, entry point `resolvescript = ResolveScript.cli:main`), README stub, LICENSE
-- [ ] `__version__`, `ResolveScript/__init__.py`
-- [ ] `cli.py` with argparse parent wiring: `create dev test analyze build package install manage consolidate extensions --version`
-- [ ] `.gitignore` (+ `dist/`, `*.egg-info`, `__pycache__`)
-- [ ] CI: `ci.yml` using shared `OseMine/workflows` `ci` action (lint `ruff check .`, `pytest`)
+### M0 — Repo bootstrap ✔
+- [x] Create `src/ResolveScript/` package, `pyproject.toml` (name `resolvescript`, entry point `resolvescript = ResolveScript.cli:main`), README stub, LICENSE
+- [x] `__version__`, `ResolveScript/__init__.py`
+- [x] `cli.py` with argparse parent wiring: `create dev test analyze build package install manage consolidate extensions --version`
+- [x] `.gitignore` (+ `dist/`, `*.egg-info`, `__pycache__`)
+- [x] CI: `nightly.yml` runs the shared `OseMine/workflows` `ci` action on a
+      schedule; `release.yml` runs `ruff` + `mypy` + `pytest` over 3.9-3.12 on
+      tags. (`ci.yml`/`workflow.yml` are consumer examples, not this repo's CI)
 
-### M1 — Manifest model & readers
-- [ ] `manifest/model.py`: dataclass `Manifest`, `ConsolidateConfig`, `InstallConfig`, enums for valid `targets`
-- [ ] `manifest/json_reader.py`: load + normalize + error reporting (with file/line hints)
-- [ ] `manifest/xml_reader.py`: ElementTree → same model
-- [ ] `manifest/validation.py`: required fields, target-name whitelist, semver format, output-path sanity, `release`/`compat` presence when `add`/`install <spec>`/`update` used
-- [ ] Tests: `test_manifest.py` (JSON round-trip, **kitchen-sink JSON↔XML parity**, malformed inputs)
+### M1 — Manifest model & readers ✔
+- [x] `manifest/model.py`: dataclass `Manifest`, `ConsolidateConfig`, `InstallConfig`, enums for valid `targets`
+- [x] `manifest/json_reader.py`: load + normalize + error reporting (with file/line hints)
+- [x] `manifest/xml_reader.py`: ElementTree → same model
+- [x] `manifest/validation.py`: required fields, target-name whitelist, semver format, output-path sanity, `release`/`compat` presence when `add`/`install <spec>`/`update` used
+      (note: release presence is enforced for `kind=extension` manifests; `compat` is consumed by `update --fix` rather than hard-required at `add` time)
+- [x] Tests: `test_manifest.py` (JSON round-trip, **kitchen-sink JSON↔XML parity**, malformed inputs)
 
-### M2 — Scaffolder (`create`)
-- [ ] `templates/extension/` skeleton (package dir, `__init__.py`, sample module, empty `tests/`, `.gitignore`)
-- [ ] Template for `manifest.json` + `manifest.xml`
-- [ ] Copy engine with `--json|--xml` and `--dir`/`--name` handling
-- [ ] `resolvescript create` end-to-end: scaffold → `ls` → shows next steps; scaffolded project passes `test` and `build` immediately
-- [ ] Tests: `test_cli.py::test_create_then_test_and_build`
+### M2 — Scaffolder (`create`) ✔
+- [x] `templates/extension/` skeleton (package dir, `__init__.py`, sample module, empty `tests/`, `.gitignore`)
+- [x] Template for `manifest.json` + `manifest.xml`
+- [x] Copy engine with `--json|--xml` and `--dir`/`--name` handling
+- [x] `resolvescript create` end-to-end: scaffold → `ls` → shows next steps; scaffolded project passes `test` and `build` immediately
+- [x] Tests: `test_scaffold.py::test_cli_create_end_to_end` plus the author-flow e2e (`create → … → remove`) in `test_cli.py`
 
 ### M3 — Consolidator (`build`, `consolidate`) ✔
 - [x] Port `scripts/build.py` into `consolidate.py` as generic functions:
@@ -644,27 +649,31 @@ anything optional becomes a plugin, not a core feature (§9).
 - [x] Tests: `test_runtime.py` (spec/semver/resolver/workspace/CLI e2e from a
       `package`-shaped tarball), `test_cli.py`, `sources.archive` round-trip
 
-### M5c — Framework extensions (plugins) — CLI itself, not Resolve
-> Deferrable: can ship in v0.2 after the §0 terminology split is enforced in
-> core (script vs extension kinds). Reuses everything from M5/M5b.
-- [ ] `manifest/model.py`: `kind` = `"script" | "extension"` + `extension_kind`
+### M5c — Framework extensions (plugins) — CLI itself, not Resolve ✔
+> Completed post-1.0.2 (see M10). Reuses everything from M5/M5b: one
+> specifier pipeline, integrity and packaging pipeline, two install targets.
+- [x] `manifest/model.py`: `kind` = `"script" | "extension"` + `extension_kind`
       (`commands`/`sources`/`hooks`/`templates`/`provides=mocks`) + `install.to`
       (`resolve` targets vs `framework`) + `requires` gate — §4.5 schema
-- [ ] `plugins.py`: plugin config dir discovery (`~/.config/resolvescript/plugins/`
-      / `%APPDATA%\resolvescript\plugins\`), lazy `entry` import, contribution
+      (`manifest.xml` reads the matching `<extension>` block)
+- [x] `plugins.py`: plugin config dir discovery (`~/.config/ResolveScript/plugins/`
+      / `%APPDATA%\ResolveScript\plugins\`, overridable via
+      `RESOLVESCRIPT_CONFIG_DIR`), lazy `entry` import, contribution
       registration into CLI dispatch at startup
-- [ ] Plugin registry + lockfile (same shape as `.resolvescript/install.json`,
-      but stored next to the CLI config)
-- [ ] `extensions add` (reuses `add` internals with `to: framework`):
+- [x] Plugin registry (same shape as `.resolvescript/install.json`, incl.
+      `source`/`integrity`, but stored next to the CLI config as `plugins.json`)
+- [x] `extensions add` (reuses `add` internals with `to: framework`):
       resolve → verify SHA-256 → version-gate check → write plugin dir →
-      register; `--force` reinstall
-- [ ] `extensions remove <name>` / `extensions list`
-- [ ] Failure isolation: unloadable/bad-version plugin is skipped with a warning,
-      never crashes the CLI
-- [ ] First-party example plugin (e.g. `resolvescript-lint` registering an
-      `analyze-extra` command) used as the M8 e2e acceptance artifact
-- [ ] Tests: `test_plugins.py` (gate, isolation, contribution registration) +
-      e2e add/list/remove of the example plugin
+      register; `--force` reinstall; a standalone local `plugin.json`
+      directory installs directly
+- [x] `extensions remove <name>` / `extensions list [--json]`
+- [x] Failure isolation: unloadable/bad-version plugin is skipped with a warning,
+      never crashes the CLI (missing hook and corrupt registry covered too)
+- [x] First-party example plugin (`examples/resolvescript-lint` registering an
+      `analyze-extra` command) used as the e2e acceptance artifact
+- [x] Tests: `test_plugins.py` (gate, isolation, contribution registration) +
+      e2e add/list/remove of the example plugin; suite isolated from
+      host-installed plugins via `tests/conftest.py`
 
 ### M6 — Analyzer (`analyze`) ✔
 - [x] Syntax compile all files; collect unused imports; manifest validation report
@@ -703,9 +712,29 @@ anything optional becomes a plugin, not a core feature (§9).
       `release-all` action (`language: python`) which builds the wheel, generates
       checksums and a GitHub release; PyPI publishing requires a `PYPI_ENABLED`
       repo variable and OIDC trusted publishing on pypi.org.
-- [ ] Tag `v1.0.2`; push the tag to trigger the release pipeline
+- [x] Tag `v1.0.2`; push the tag to trigger the release pipeline (tag exists,
+      released 2026-10-08)
 - [x] Docs: `README.md` quickstart + manifest reference + specifier reference;
       `CHANGELOG.md` captures the full v1.0.2 feature set
+
+### M10 — Post-release hardening (audit response) ✔
+- [x] Unified error taxonomy: `ResolveScriptError` base under all 23 domain
+      errors (historic bases preserved via multiple inheritance, so
+      `except ValueError`/`RuntimeError` handlers keep working) + contract
+      test over `__all__` (`rs.ResolveScriptError`)
+- [x] `py.typed` marker (verified in the built wheel) + `[tool.mypy]`;
+      63 type errors fixed across 12 files; `release.yml` gained a
+      `Type check` step (bare `mypy`, 71 source files clean)
+- [x] `resolvescript doctor [--scripts-root DIR] [--json]` — 7 checks
+      (interpreter, templates, scripts root, env overrides, manifest,
+      workspace, registry); exit 1 on failure; library form
+      `ResolveScript.doctor.run_checks()` + 13 tests
+- [x] Namespaced logging (`ResolveScript.*` logger hierarchy) at resolver
+      dispatch / download / cache / install / write points, surfaced on the
+      CLI with `-v` (info) and `-vv` (debug)
+- [x] Doc-drift fixes: README "Python 3.12+" → 3.9+, package docstring
+      example (`load_manifest` + `config_from_manifest`), Library API
+      error-taxonomy docs, CHANGELOG Unreleased entries
 
 ---
 
