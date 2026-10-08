@@ -27,11 +27,11 @@ classifiers = [
 # resolver still picks the newest pytest the running interpreter allows.
 dev = [
     "pytest>=7",
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
 ]
 test = [
     "pytest>=7",
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
 ]
 
 [project.scripts]
