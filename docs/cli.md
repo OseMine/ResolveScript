@@ -5,12 +5,13 @@ Complete reference for `resolvescript` commands.
 ## Global Options
 
 ```bash
-resolvescript [--version] <command> [args...]
+resolvescript [--version] [-v|--verbose] <command> [args...]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--version` | Show version and exit |
+| `-v, --verbose` | Log diagnostics: `-v` info level, `-vv` debug level |
 | `-h, --help` | Show help for command |
 
 ---
@@ -30,6 +31,7 @@ resolvescript create <name> [options]
 | `--template TEMPLATE` | Scaffold flavor (default: minimal) |
 | `--description TEXT` | Project description |
 | `--author NAME` | Author name |
+| `--include PACKAGE`| Project gets created with a Resolvescript extension or helper plugin like `pydavinci` already set up |
 
 **Templates:**
 
@@ -40,12 +42,23 @@ resolvescript create <name> [options]
 | `davinci-rest` | davinci-rest REST client |
 | `lua` | Lua script project |
 | `workflow` | Workflow Integration (Workspace > Workflow Integrations) |
+| `extension` | A **ResolveScript extension** (a.k.a. **plugin**) |
 | `fuse` | Fusion fuse (scripted `.fuse` plugin) |
+
+**Includes:**
+
+Project gets created with a Resolvescript extension or helper plugin like `pydavinci` already set up
+
+Use Resolvescript Extensions by git:https://giturlhere
+
+multiple includes are supported
+
 
 **Examples:**
 ```bash
 resolvescript create my_tool --template pydavinci
 resolvescript create my_fuse --template fuse --dir /projects
+resolvescript create my_workflow --template workflow --include git:https://github.com/CoolDev/ResolveScriptExtension
 ```
 
 ---
@@ -228,6 +241,39 @@ resolvescript search <query>
 ```
 
 Searches known table + conventions.
+
+---
+
+## Diagnostics
+
+### `doctor` — Self-diagnosis
+
+```bash
+resolvescript doctor [--scripts-root DIR] [--json]
+```
+
+Checks the interpreter and package install, template package-data, Scripts
+root discovery (override > `RESOLVESCRIPT_SCRIPTS_ROOT` > OS default),
+`RESOLVESCRIPT_*`/`RESOLVE_*` env overrides, the project manifest,
+`resolvescript.json` and the install registry. Every check reports
+`ok` / `warn` / `fail`; the command exits `1` when any check fails.
+
+| Option | Description |
+|--------|-------------|
+| `--scripts-root DIR` | Check against this Scripts root instead of the discovered one |
+| `--json` | Machine-readable output (`checks`, `warnings`, `failures`) |
+
+```console
+$ resolvescript doctor
+[ ok ] interpreter   CPython 3.12.10 (resolvescript 1.0.2, installed package)
+[ ok ] templates     6 template(s) in .../ResolveScript/templates
+[warn] scripts-root  .../Fusion/Scripts (OS default) - missing; launch DaVinci Resolve once or pass --scripts-root
+[ ok ] environment   no RESOLVESCRIPT_*/RESOLVE_* overrides set
+[ ok ] manifest      my-tool 1.0.2 - targets: Comp
+[ ok ] workspace     no resolvescript.json in /path
+[ ok ] registry      no registry at .../install.json (nothing installed yet)
+1 warning(s), 0 failure(s)
+```
 
 ---
 

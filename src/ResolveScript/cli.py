@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import logging
 import sys
 from functools import partial
 from pathlib import Path
@@ -499,6 +500,27 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from .doctor import FAIL, WARN, issues_json, run_checks
+
+    root = Path(args.scripts_root).expanduser() if args.scripts_root else None
+    checks = run_checks(scripts_root=root, cwd=Path.cwd())
+    if getattr(args, "json", False):
+        print(issues_json(checks))
+        return 1 if any(check.status == FAIL for check in checks) else 0
+
+    labels = {"ok": " ok ", "warn": "warn", "fail": "FAIL"}
+    for check in checks:
+        print(f"[{labels[check.status]}] {check.name:<13} {check.detail}")
+    failures = sum(1 for check in checks if check.status == FAIL)
+    warnings = sum(1 for check in checks if check.status == WARN)
+    if failures or warnings:
+        print(f"{warnings} warning(s), {failures} failure(s)")
+    else:
+        print("all checks passed")
+    return 1 if failures else 0
+
+
 def _cmd_manage_list(args: argparse.Namespace) -> int:
     from .install.registry import read_registry
 
@@ -915,11 +937,11 @@ def _cmd_fuse(args: argparse.Namespace, action: str) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         try:
-            result = package_fuse(fuse, dist, plugin=plugin, check=not args.no_check)
+            package_result = package_fuse(fuse, dist, plugin=plugin, check=not args.no_check)
         except FuseError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        print("\n".join(result.describe()))
+        print("\n".join(package_result.describe()))
         return 0
 
     # action == "install"
@@ -1144,6 +1166,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="log diagnostics: -v info level, -vv debug level",
+    )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     p = sub.add_parser("create", help="scaffold a new Resolve script project")
@@ -1217,6 +1246,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("search", help="discover Resolve scripts (known table + conventions)")
     p.add_argument("query", help="search term")
     p.set_defaults(func=_cmd_search)
+
+    p = sub.add_parser("doctor", help="diagnose the environment, project and install registry")
+    p.add_argument("--scripts-root", help="override OS-detected Scripts root / RESOLVESCRIPT_SCRIPTS_ROOT")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(func=_cmd_doctor)
 
     p = sub.add_parser("consolidate", help="merge a package directory into a single .py (no manifest needed)")
     p.add_argument("package_dir", help="package directory to consolidate")
@@ -1400,6 +1434,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    level = logging.DEBUG if args.verbose >= 2 else logging.INFO if args.verbose == 1 else logging.WARNING
+    logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
     command = getattr(args, "command", None)
     if command is None:
         parser.print_help()
