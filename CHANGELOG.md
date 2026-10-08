@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Added
+
+- `release.yml` generates **AI release notes** before publishing:
+  `OseMine/workflows`' `opencode` action runs OpenCode first and falls back
+  to Mistral, producing six fixed sections (Features, Fixes, Breaking,
+  Other, Technical, docs) from the commit range since the previous tag.
+  When AI is unavailable the body falls back to this version's CHANGELOG
+  section, then `git log`, then GitHub's own generated notes — a missing
+  model never blocks a release.
+- `workflow_dispatch` on the release workflow gained a `dry-run` input
+  (full pipeline, no publish), and its `version` input now actually selects
+  the release tag instead of letting the run target the branch name.
+
 ## 1.0.1 - 2026-10-08
 
 ### Added
