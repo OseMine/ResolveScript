@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.0.1 - 2026-10-08
+
+### Added
+
+- `tests/test_installer_lua.py` — 13 cases covering `build --installable`:
+  the generated Lua installer, token substitution (`_fill` raising on a
+  leftover `@@TOKEN@@`), and the rendered install window.
+- README section on **Fusion fuses and plugins** documenting all four
+  project kinds (`script`, `workflow`, `fuse`, `plugin`) and where
+  `resolvescript create --template fuse` fits in.
+
+### Changed
+
+- The 1.0.0 changelog entry was expanded with the full fuse/plugin feature
+  list, and `docs/fuse.md` / `docs/plugin.md` now cover the build,
+  package and install flows end to end.
+
 ## 1.0.0 - 2026-10-07
 
 One release covering the whole toolchain: scripts, workflow integrations,
