@@ -26,7 +26,7 @@ Install with pip: `pip install resolvescript` (Python 3.9+).
 
 | Aspect          | Specification                     |
 | --------------- | --------------------------------- |
-| Current version | v1.0.2                            |
+| Current version | v1.1.0                            |
 | Resolve support | DaVinci Resolve Free & Studio 18+ |
 | License         | MIT                               |
 
@@ -64,7 +64,7 @@ my-cool-tool/
 
 | Command | Purpose |
 | --- | --- |
-| `create <name>` | Scaffold a new project (`--json`/`--xml`, `--template minimal\|pydavinci\|davinci-rest\|lua\|workflow\|extension\|fuse`, `--dir`) |
+| `create <name>` | Scaffold a new project (`--json`/`--xml`, `--template minimal\|pydavinci\|davinci-rest\|lua\|workflow\|fuse\|ui\|extension`, `--dir`) |
 | `dev` | Sandboxed dev loop / REPL against the mock Resolve API (`--built` for the consolidated file, `--repl`, `--editor`) |
 | `test` | Run the project's pytest suite against the mock API (`--built`, `-k pattern`, `--api-coverage`) |
 | `analyze` | Static checks: missing entrypoint/module, syntax, unused imports, unmocked API methods, attribute typing (`--json`) |
@@ -102,7 +102,7 @@ Recorded specs live in `resolvescript.json`; use `resolvescript install --locked
 ```jsonc
 {
   "name": "my-cool-tool",          // required
-  "version": "1.0.2",              // required, semver
+  "version": "1.1.0",              // required, semver
   "author": "You",
   "description": "...",
   "python": "my_cool_tool",        // package/module name (defaults to "name")
@@ -116,7 +116,7 @@ Recorded specs live in `resolvescript.json`; use `resolvescript install --locked
   "scripts_root": "",               // per-OS override for the Resolve Scripts root
   "consolidate": { "enabled": true, "output": "dist/my_tool.py", "exclude": [], "no_comment": [] },
   "install": { "as_directory": true, "include": [], "exclude": [], "to": "resolve" },
-  "dependencies": ["github:example/dep"]   // resolved on install
+  "dependencies": ["github:example/dep"]   // metadata only (not consumed by installer)
 }
 ```
 

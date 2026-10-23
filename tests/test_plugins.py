@@ -8,19 +8,19 @@ from pathlib import Path
 import pytest
 
 from ResolveScript import cli
-from ResolveScript.install.installer import InstallError, InstallOptions, install_package
-from ResolveScript.manifest import load_manifest
-from ResolveScript.manifest.model import RequiresConfig
-from ResolveScript.plugins import (
+from ResolveScript.extensions import (
     PluginEntry,
     PluginError,
     PluginManifest,
     PluginRegistry,
-    _get_config_dir,
+    get_config_dir,
     install_plugin,
     list_plugins,
     uninstall_plugin,
 )
+from ResolveScript.install.installer import InstallError, InstallOptions, install_package
+from ResolveScript.manifest import load_manifest
+from ResolveScript.manifest.model import RequiresConfig
 
 EXAMPLE_LINT = Path(__file__).resolve().parents[1] / "examples" / "resolvescript-lint"
 
@@ -121,7 +121,7 @@ def _register_fake_entry(
 
 
 def test_config_dir_env_override(config_dir: Path) -> None:
-    assert _get_config_dir() == config_dir
+    assert get_config_dir() == config_dir
 
 
 def test_install_plugin_json_package(config_dir: Path, tmp_path: Path) -> None:
@@ -340,3 +340,147 @@ def test_example_plugin_end_to_end(
     assert cli.main(["extensions", "remove", "resolvescript-lint"]) == 0
     assert cli.main(["extensions", "list"]) == 0
     assert "no framework extensions installed" in capsys.readouterr().out
+
+
+# --- hook dispatch tests -----------------------------------------------------
+
+
+def _hook_plugin_pkg(root: Path) -> Path:
+    """Create a plugin package with pre_build and post_install hooks."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "hook_entry.py").write_text("def register_commands(parser): pass\n", encoding="utf-8")
+    (root / "hook_impl.py").write_text(
+        "def on_pre_build(manifest, root):\n"
+        "    print(f'HOOK pre_build: {manifest.name}')\n"
+        "\n"
+        "def on_post_install(result, scripts_root):\n"
+        "    print(f'HOOK post_install: {result.name}')\n",
+        encoding="utf-8",
+    )
+    plugin: dict = {
+        "name": "hook-plugin",
+        "version": "1.0.0",
+        "kind": "extension",
+        "entry": "hook_entry.py",
+        "commands": [],
+        "hooks": {
+            "pre_build": "hook_impl:on_pre_build",
+            "post_install": "hook_impl:on_post_install",
+        },
+    }
+    (root / "plugin.json").write_text(json.dumps(plugin), encoding="utf-8")
+    return root
+
+
+def test_plugin_hook_dispatch_pre_build(
+    config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """pre_build hook is called during resolvescript build."""
+    pkg = _hook_plugin_pkg(tmp_path / "pkg")
+    (tmp_path / "project").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(tmp_path / "project")
+    (tmp_path / "project" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "test-project",
+                "version": "1.0.0",
+                "author": "Test",
+                "description": "test",
+                "python": "test_project",
+                "targets": ["Comp"],
+                "consolidate": {"enabled": True, "output": "test.py", "entry": "test/__init__.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "project" / "test").mkdir()
+    (tmp_path / "project" / "test" / "__init__.py").write_text("def run(): pass\n", encoding="utf-8")
+
+    monkeypatch.setenv("RESOLVESCRIPT_CONFIG_DIR", str(config_dir))
+    assert cli.main(["extensions", "add", str(pkg)]) == 0
+
+    assert cli.main(["build"]) == 0
+    out = capsys.readouterr().out
+    assert "HOOK pre_build: test-project" in out
+
+
+def test_plugin_hook_dispatch_post_install(
+    config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """post_install hook is called during resolvescript install."""
+    pkg = _hook_plugin_pkg(tmp_path / "pkg")
+    (tmp_path / "project").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(tmp_path / "project")
+    (tmp_path / "project" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "test-project",
+                "version": "1.0.0",
+                "author": "Test",
+                "description": "test",
+                "python": "test_project",
+                "targets": ["Comp"],
+                "consolidate": {"enabled": True, "output": "test.py", "entry": "test/__init__.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "project" / "test").mkdir()
+    (tmp_path / "project" / "test" / "__init__.py").write_text("def run(): pass\n", encoding="utf-8")
+
+    scripts = tmp_path / "scripts"
+    monkeypatch.setenv("RESOLVESCRIPT_CONFIG_DIR", str(config_dir))
+    assert cli.main(["extensions", "add", str(pkg)]) == 0
+
+    assert cli.main(["install", "--scripts-root", str(scripts)]) == 0
+    out = capsys.readouterr().out
+    assert "HOOK post_install: test-project" in out
+
+
+def test_plugin_hook_dispatch_extensions_add(
+    config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """post_install hook is called during resolvescript extensions add."""
+    pkg = _hook_plugin_pkg(tmp_path / "pkg")
+    monkeypatch.setenv("RESOLVESCRIPT_CONFIG_DIR", str(config_dir))
+    assert cli.main(["extensions", "add", str(pkg)]) == 0
+    out = capsys.readouterr().out
+    assert "HOOK post_install: hook-plugin" in out
+
+
+def test_plugin_hook_missing_module_warns(
+    config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Missing hook module produces a warning but doesn't crash."""
+    pkg = _hook_plugin_pkg(tmp_path / "pkg")
+    # Change hook to reference non-existent module
+    plugin_json = pkg / "plugin.json"
+    data = json.loads(plugin_json.read_text(encoding="utf-8"))
+    data["hooks"]["pre_build"] = "nonexistent:func"
+    plugin_json.write_text(json.dumps(data), encoding="utf-8")
+
+    (tmp_path / "project").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(tmp_path / "project")
+    (tmp_path / "project" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "test-project",
+                "version": "1.0.0",
+                "author": "Test",
+                "description": "test",
+                "python": "test_project",
+                "targets": ["Comp"],
+                "consolidate": {"enabled": True, "output": "test.py", "entry": "test/__init__.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "project" / "test").mkdir()
+    (tmp_path / "project" / "test" / "__init__.py").write_text("def run(): pass\n", encoding="utf-8")
+
+    monkeypatch.setenv("RESOLVESCRIPT_CONFIG_DIR", str(config_dir))
+    assert cli.main(["extensions", "add", str(pkg)]) == 0
+    assert cli.main(["build"]) == 0
+    err = capsys.readouterr().err
+    assert "hook 'pre_build' failed" in err
+    assert "failed to import hook module" in err

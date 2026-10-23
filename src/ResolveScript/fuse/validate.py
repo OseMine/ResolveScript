@@ -22,6 +22,7 @@ implies a guarantee it did not verify.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shutil
 import subprocess
@@ -205,13 +206,11 @@ def problems(fuse: Fuse, path: str | Path | None = None) -> list[str]:
     if path is not None:
         source = Path(path).read_text(encoding="utf-8")
         found.extend(check_source(source))
-        try:
+        with contextlib.suppress(RuntimeError):
+            # No interpreter is not a defect in the fuse. ``checked_with``
+            # reports that only the structural layer ran, so a build never
+            # claims more than it verified.
             found.extend(parse_file(path))
-        except RuntimeError:
-            # Reported, not swallowed: the structural result stands on its own,
-            # and a build that claims more than it checked is worse than one
-            # that says so.
-            found.append("no Lua interpreter on PATH — checked structure only")
     return found
 
 

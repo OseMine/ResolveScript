@@ -33,8 +33,8 @@ FUNCTION_EXPORTS = {
     "python_spec", "scripts_root_override", "user_config_dir",
     # spec / resolver / workspace
     "lockfile_satisfies", "resolve_spec", "matches", "pick_best",
-    "parse_specifier", "add_dependency", "has_workspace", "read_workspace",
-    "remove_dependency", "save", "workspace_path", "write_workspace",
+    "parse_specifier", "add_dependency", "has_workspace", "install_settings",
+    "read_workspace", "remove_dependency", "save", "workspace_path", "write_workspace",
     # pipeline
     "analyze_project", "issues_to_json", "config_from_manifest", "consolidate",
     "summarize", "package_project",
@@ -67,7 +67,7 @@ CLASS_EXPORTS = {
     "FakeTimeline", "FakeTool", "SmokeCheck", "SmokeResult",
     # spec / resolver / workspace / semver
     "ResolveError", "Resolved", "SemVerError", "Version", "Spec",
-    "SpecError", "WorkspaceError",
+    "SpecError", "WorkspaceError", "InstallSettings",
     # pipeline
     "Analysis", "BuildConfig", "ConsolidateError", "ConsolidateResult",
     "Issue", "PackageError", "PackageResult",

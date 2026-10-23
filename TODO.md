@@ -1,48 +1,60 @@
 # ResolveScript — Plan & Todos
 
 > A Python **CLI and library framework** for **building, coding, testing,
-> packaging and installing DaVinci Resolve Python extensions** — distributed as
+> packaging and installing DaVinci Resolve extensions** — distributed as
 > `pip install resolvescript`.
 >
 > Generalizes the workflow proven in `X:\coding\Rotoscope`:
 > multi-file package → consolidated single-file → installed into Resolve's
-> Fusion Scripts folder. Extensions are **manifest-driven**: a
-> `manifest.json` (or `manifest.xml`) in the extension project tells the CLI
-> what to build, where to install, and what tests/dev tooling apply.
+> Fusion Scripts folder. Projects are **manifest-driven**: a `manifest.json`
+> (or `manifest.xml`) tells the CLI what to build, where to install, and what
+> tests/dev tooling apply.
 >
 > **Consuming** extensions works like a package manager (the npm / pnpm /
 > `tauri add` / `expo install` model): declare them in a committed
 > `resolvescript.json`, and the CLI resolves the exact artifact, verifies its
-> SHA-256, installs it into Resolve, and tracks every install in a lockfile
-> so `update` / `remove` / `list` are deterministic.
+> SHA-256, installs it, and tracks every install in a lockfile so `update` /
+> `remove` / `list` are deterministic.
 >
 > **Library API**: every CLI feature is also available as a Python API:
 > `import ResolveScript as rs` gives you scaffold, analyze, consolidate,
-> package, install, sandbox, manifest loaders, spec resolution, and more —
-> usable in scripts, REPLs, and build automation without invoking the CLI.
+> package, install, sandbox, UI, fuse, workflow, manifest loaders, spec
+> resolution, and more — usable in scripts, REPLs, and build automation
+> without invoking the CLI.
+
+**Last synced:** 2026-10-23 · **Version:** 1.1.0 (`v1.1.0`) · **Python:** 3.9+
+
+**Status:** M0–M16 shipped. All P0 items complete. Work is now optional P1/P2 backlog in §9.
 
 ---
 
-## 0. Terminology — two different kinds of "extension"
+## 0. Terminology — the artifact classes
 
-This plan uses the word *extension* for two different artifact classes. They
-share the resolver/installer machinery but are distinctly named:
+ResolveScript handles four artifact classes. They share manifests, packaging
+and (for scripts/plugins) the resolver and SHA-256 pipeline, but they install
+to different places and are managed by different command groups.
 
-| | **Resolve script** (a.k.a. **Resolve extension**) | **ResolveScript extension** (a.k.a. **plugin**) |
-|---|---|---|
-| What it is | A user-facing tool that runs **inside DaVinci Resolve** (Fusion): a roto helper, comp utility, LUT tool… | An add-on that **extends the `resolvescript` CLI itself**: new commands, custom specifier sources, build hooks, scaffold templates, extra mock modules, alternate registry backends |
-| Lives in | DaVinci Resolve's Fusion Scripts root (`Scripts/Comp`, `Scripts/Utility`, …) | The CLI's own user config dir (`~/.config/resolvescript/` / `%APPDATA%\resolvescript\`), loaded at CLI startup |
-| Declared by | `manifest.json` / `manifest.xml` (a **script manifest**) | `plugin.json` with a `kind` (a **plugin manifest**, §4.5) |
-| Managed by | `create` · `dev` · `test` · `build` · `package` · `add` · `install` · `update` · `remove` · `search` | `resolvescript extensions add/remove/list` |
-| Executed with | DaVinci Resolve's bundled Python when the user runs the script in-app | `resolvescript` itself (`pip install`ed Python) when a command runs |
-| Example | `rotoscope` — a media/timeframe/polyline tool | `resolvescript-lint` — a plugin adding an `analyze-extra` command or a `registry:` source |
+| | **Resolve script** | **ResolveScript extension** (plugin) | **Workflow integration** | **Fusion fuse** |
+|---|---|---|---|---|
+| What it is | A user-facing tool that runs **inside DaVinci Resolve** (Fusion): roto helper, comp utility, LUT tool… | An add-on that **extends the `resolvescript` CLI itself**: commands, sources, hooks, templates, mocks | A module Resolve scans for and launches under **Workspace > Workflow Integrations** | A scripted Lua `.fuse` plugin Fusion compiles on the fly; `.plugin` binaries are deploy-only |
+| Manifest `kind` | `"script"` (default) | `"extension"` | `"workflow"` | `"fuse"` |
+| Lives in | Resolve's Fusion Scripts root (`Scripts/Comp`, `Scripts/Utility`, …) | CLI config dir (`~/.config/ResolveScript/plugins/`, `%APPDATA%\ResolveScript\plugins\`) | Resolve's Workflow Integration Plugins dir | Fusion's `Fuses/` or `Plugins/` directory |
+| Managed by | `create` · `dev` · `test` · `build` · `package` · `add` · `install` · `update` · `remove` · `search` | `extensions add/remove/list` | `workflow build/install/…` | `fuse build/install/package/…` |
+| Executed with | Resolve's bundled Python in-app | `resolvescript` itself (pip-installed Python) | Resolve launches the launcher / Electron shell | Fusion's Lua runtime |
+| Example | `rotoscope` — media/timeframe/polyline tool | `resolvescript-lint` — adds `analyze-extra` | a delivery/render panel | `Posterize.fuse` |
 
-**Convention used below:** bare "extension" always means a **Resolve script**
-(installed into DaVinci Resolve). Framework add-ons are spelled
-**"framework extension"** or **plugin** and install into the CLI, never into
-Resolve. The pipeline is one: a plugin is a script whose `kind`/`install.to`
-targets the framework instead of Resolve, so specifier grammar, integrity
-(SHA-256), registry and lockfile are shared (see §4.5, §5, M5c).
+**Conventions used below:**
+
+- Bare **"extension"** means a **Resolve script** installed into DaVinci Resolve.
+- A **framework extension** / **plugin** installs into the CLI, never Resolve.
+- A **workflow** is not a script in the Scripts tree; it has its own plugins root.
+- A **fuse** is not a Python script; the framework generates and validates Lua.
+- Shipped plugins use `manifest.json` with `kind: "extension"`; a standalone
+  `plugin.json` is also accepted for plugin-only projects.
+- Scripts and plugins share one specifier grammar, integrity and lockfile
+  pipeline (§4.4, §5). Fuses/workflows are project-built and installed through
+  their own command groups; they are not `add`-able registry artifacts today
+  (see §9).
 
 ---
 
@@ -51,761 +63,715 @@ targets the framework instead of Resolve, so specifier grammar, integrity
 Replace the hand-rolled, project-specific scripts in Rotoscope
 (`scripts/build.py`, `scripts/install.py`, `scripts/install.lua`,
 `dev/sandbox.py`, tests, release workflow) with a **generic, pip-installable
-CLI and library framework** that any Resolve extension project can use.
+CLI and library framework** that any Resolve extension project can use — now
+also covering Fusion fuses, workflow integrations, declarative UI and CLI
+plugins.
 
-### CLI usage
+### CLI surface (v1.1.0)
 
-```
+```console
 pip install resolvescript
 
-resolvescript create my_extension        # scaffold a new extension project
-resolvescript dev                        # sandboxed REPL / dev loop in-project
-resolvescript test                       # run tests against the mock Resolve API
-resolvescript analyze                    # static checks on the extension
-resolvescript build                      # consolidate multi-file → single-file
-resolvescript package                    # produce release artifacts (single-file + assets)
+resolvescript create my_extension        # scaffold (minimal, pydavinci, davinci-rest,
+                                         #   lua, workflow, fuse, ui, extension)
+resolvescript dev                        # sandboxed dev loop in-project
+resolvescript test                       # tests against the mock Resolve API
+resolvescript analyze                    # static checks
+resolvescript build                      # consolidate multi-file -> single-file
+                                         #   --installable emits a Lua installer
+resolvescript package                    # release artifacts (tar.gz + SHA256SUMS)
 
 # install — package-manager style (npm/pnpm, `tauri add`, `expo install`)
-resolvescript add <spec>                 # install + record into resolvescript.json (pnpm add / expo install)
-resolvescript install                    # materialize everything recorded in resolvescript.json (npm install)
-resolvescript install <spec>             # one-off install of a single spec, no recording (cargo install)
-resolvescript update [<name>]            # re-resolve within recorded ranges; --fix realigns Resolve/Python compat
-resolvescript remove <name>              # uninstall + unrecord (npm uninstall)
-resolvescript search <query>             # discover extensions (known list; registry index later)
-resolvescript doctor                     # diagnose interpreter, scripts root, manifests, registry (--json)
-resolvesctipt clean                      # deletes all resolvescript cache, build and extensions files
+resolvescript add <spec>                 # install + record in resolvescript.json
+resolvescript install                    # materialize everything recorded
+resolvescript install <spec>             # one-off install, no recording
+resolvescript update [<name>]            # re-resolve; --fix realigns compat
+resolvescript upgrade                    # alias for update
+resolvescript remove <name>              # uninstall + unrecord
+resolvescript search <query>             # discover scripts (known table)
+resolvescript doctor                     # diagnose setup (--json)
+resolvescript clean                      # caches, dist/, registries, __pycache__
 
-resolvescript manage list                # list installed extensions (reads .resolvescript/install.json)
-resolvescript consolidate <package>      # one-off: merge a package dir into one .py
-resolvescript extensions add <spec>      # install a FRAMEWORK extension (plugin, into the CLI, not Resolve)
-resolvescript extensions remove <name>   # uninstall a plugin
-resolvescript extensions list            # list installed plugins
+resolvescript manage list                # installed extensions (install.json)
+resolvescript manage remove [--all]      # low-level registry removal
+resolvescript consolidate <package>      # merge any package dir into one .py
+resolvescript extensions add/remove/list # framework extensions (CLI plugins)
+
+resolvescript workflow build|install|install-script|install-plugin|list|uninstall|root|describe
+resolvescript fuse build|install|package|list|uninstall|root|describe
 ```
 
-### Library usage (scripted framework)
+### Library surface
 
-```
+```python
 import ResolveScript as rs
 
-# scaffold a new project
 root, written = rs.scaffold_project("my_tool", destination=".")
-
-# static analysis
 issues = rs.analyze_project(root)
-for issue in issues:
-    print(issue)
-
-# load & validate manifest
 manifest = rs.load_manifest(root / "manifest.json")
 rs.validate_manifest_or_throw(manifest)
-
-# consolidate to a single file
 cfg = rs.config_from_manifest(root, manifest)
 result = rs.consolidate(cfg)
-print(rs.summarize(result, cfg))
-
-# package a release artifact
 pkg = rs.package_project(root)
-print(pkg.archive)
 
-# sandbox for testing
-from rs.sandbox import build_default_env, fake_resolve_module, run_smoke
-env = build_default_env()
-fake_resolve_module(env)
-run_smoke(my_module)
+from ResolveScript.sandbox import build_default_env, fake_resolve_module, run_smoke
+from ResolveScript.install import install_project
+
+# specialised frameworks
+from ResolveScript.ui import Window, Column, Button, Value, run
+from ResolveScript.fuse import Fuse, Control, BinaryPlugin
+from ResolveScript.workflow import Integration, Context
 ```
 
 `add/install/update/remove/search` operate on **Resolve scripts**. Manage
-**ResolveScript extensions** (plugins that extend the CLI) via the
-`extensions` subgroup; both share the same specifier grammar (§0, §4.5, M5c).
+**ResolveScript extensions** (plugins) via the `extensions` subgroup. Both
+share the same specifier grammar (§4.4, §5).
 
-Where `<spec>` is one of (documented once, reused by `add`/`install`/`update`):
+Where `<spec>` is one of (reused by `add` / `install` / `update`):
 
 ```
-name                          # known-extension table / registry index (latest)
+name                          # known-extension table (latest)
 name@1.2.3                    # index version, semver range, or dist-tag
-owner/repo                    # implies github:owner/repo   (pnpm shorthand)
-github:owner/repo[#ref]       # git source; #semver:^1.0 → range over release tags
+owner/repo                    # implies github:owner/repo
+github:owner/repo[#ref]       # git source; #semver:^1.0 → range over tags
 git+https://host/repo.git#ref
-https://host/ext-0.2.0.tgz    # archive (tar.gz / .zip) with manifest.json at root
-https://host/manifest.json    # direct manifest URL → points at the artifact
+https://host/ext-0.2.0.tgz    # archive (tar.gz / .zip), manifest at root
+https://host/manifest.json    # manifest URL → points at the artifact
 file:./tools/comp -or- ./dir  # local path / workspace link
 ```
 
-Name **`resolvescript`** is available on PyPI (verified 2026-09-14, 404).
+The PyPI name `resolvescript` is in use (v1.1.0 tagged; see M15).
 
 ---
 
+## 3. Project layout (actual, v1.1.0)
 
-## 3. Project layout (in this repo)
-
-```
+```text
 ResolveScript/
-├── TODO.md                           # this plan
-├── pyproject.toml                    # package resolvescript
+├── TODO.md                       # this plan
+├── pyproject.toml                # package resolvescript, version 1.1.0
 ├── README.md
+├── CHANGELOG.md
 ├── LICENSE
-├── src/
-│   └── ResolveScript/
-│       ├── __init__.py               # __version__
-│       ├── cli.py                    # entry point: resolvescript
-│       ├── config.py                 # locate/read Config (manifest discovery, env)
-│       ├── errors.py                 # ResolveScriptError base for every domain error
-│       ├── doctor.py                 # `doctor` checks (library form: run_checks())
-│       ├── manifest/
-│       │   ├── __init__.py
-│       │   ├── model.py              # Manifest dataclass (name, version, targets, …)
-│       │   ├── json_reader.py
-│       │   ├── xml_reader.py
-│       │   └── validation.py         # schema lints + error messages
-│       ├── consolidate.py            # port of scripts/build.py (generic)
-│       ├── resolver.py               # specifier grammar + semver ranges + source dispatch
-│       ├── sources/                  # known-table, manifest-URL, archive, git, path fetchers
-│       │   ├── __init__.py
-│       │   ├── known.py              # hardcoded known-extension table (Tauri model)
-│       │   ├── manifest_url.py       # https://…/manifest.json → artifact
-│       │   ├── archive.py            # tar.gz / .zip unpack (package/-root contract)
-│       │   ├── git.py                # codeload archive preferred, `git` CLI fallback
-│       │   └── path.py               # file:// and ./dir local/workspace links
-│       ├── fetch.py                  # urllib download + mandatory SHA-256 integrity verify
-│       ├── registry.py               # read/write .resolvescript/install.json (lockfile)
-│       ├── workspace.py              # read/write resolvescript.json deps config
-│       ├── install.py                # author + consumer install (atomic, verified)
-│       ├── plugins.py                # framework-extension loader + registry (extensions add/remove/list)
-│       ├── manage.py                 # list / update / remove from the registry
-│       ├── analyze.py                # static checks + API/coverage report
-│       ├── package.py                # produce dist/ artifacts (+ the tarball `add` consumes)
-│       ├── sandbox/
-│       │   ├── __init__.py
-│       │   ├── api.py                # mock Resolve/Fusion objects (from dev/sandbox.py)
-│       │   ├── env.py                # build_default_env(), inject module
-│       │   ├── smoke.py              # run_smoke() checks against a module
-│       │   └── repl.py               # interactive session
-│       ├── testing/
-│       │   ├── __init__.py
-│       │   └── fixtures.py           # pytest fixtures (install mock, load built/source)
-│       ├── discovery.py              # locate Fusion Scripts root per OS
-│       ├── py.typed                  # PEP 561 marker (ships in the wheel)
-│       └── templates/
-│           ├── extension/            # `create` scaffold (package + manifest + tests + sandbox)
-│           ├── in_app_script.py.j2   # menu-style entry script template
-│           └── lua_installer.lua.j2  # optional bundled Lua installer
-├── examples/
-│   └── resolvescript-lint/           # first-party example plugin (M5c acceptance)
-├── tests/
-│   ├── conftest.py                   # hermetic plugin-registry isolation
-│   ├── test_manifest.py
-│   ├── test_consolidate.py
-│   ├── test_install.py
-│   ├── test_sandbox.py
-│   ├── test_analyze.py
-│   ├── test_cli.py
-│   ├── test_doctor.py                # `doctor` checks
-│   ├── test_errors.py                # ResolveScriptError contract
-│   └── test_plugins.py               # M5c lifecycle, gate, failure isolation
+├── docs/
+│   ├── cli.md  manifest.md  templates.md  install.md  installer.md
+│   ├── testing.md  consolidate.md  fuse.md  ui.md  workflow.md
+│   └── github-actions.md
+├── examples/resolvescript-lint/  # first-party CLI plugin
+├── scripts/dryrun_release.py
+├── src/ResolveScript/
+│   ├── __init__.py               # 140+ public names, __version__
+│   ├── _version.py
+│   ├── cli.py                    # single argparse entry point
+│   ├── config.py  errors.py  doctor.py
+│   ├── scaffold.py  analyze.py  consolidate.py  package.py
+│   ├── resolver.py  spec.py  semver.py  fetch.py
+│   ├── workspace.py  installer_lua.py
+│   ├── extensions/               # framework extension (CLI plugin) management
+│   │   ├── config.py  errors.py  hooks.py  loader.py
+│   │   ├── manager.py  manifest.py  registry.py
+│   ├── manifest/                 # model, json_reader, xml_reader, validation
+│   ├── sources/                  # known, archive, git, release
+│   ├── install/                  # discovery, installer, registry
+│   ├── sandbox/                  # api, env, loader, repl, smoke
+│   ├── fuse/                     # model, render, validate, build, paths
+│   ├── ui/                       # node, spec, dsl, components, state, events,
+│   │                             #   render, rows, theme, app, jsonio, errors
+│   │   └── backends/             # base, fusion (UIManager), mock
+│   ├── workflow/                 # model, script, plugin, bridge, runtime,
+│   │                             #   build, paths, testing
+│   ├── testing/fixtures.py       # pytest fixtures
+│   ├── templates/
+│   │   ├── extension/            # minimal Resolve script (JSON/XML)
+│   │   ├── external/             # pydavinci, davinci_rest
+│   │   ├── lua/                  # pure Lua script
+│   │   ├── workflow/             # Integration + Electron shell
+│   │   ├── fuse/                 # Fuse declaration
+│   │   ├── ui/                   # structured UI project
+│   │   ├── plugin/               # framework extension (CLI plugin)
+│   │   └── inapp/register.py     # in-app registration helper
+│   └── py.typed
+├── tests/                        # 518 test functions across 18 files
+│   ├── test_ui.py (141)          test_fuse.py (130)
+│   ├── test_sandbox.py (32)      test_consolidate.py (30)
+│   ├── test_runtime.py (29)      test_install.py (23)
+│   ├── test_manifest.py (20)     test_plugins.py (19)
+│   ├── test_scaffold.py (15)     test_installer_lua.py (13)
+│   ├── test_doctor.py (13)       test_security.py (12)
+│   ├── test_library.py (12)      test_analyze.py (10)
+│   ├── test_package.py (6)       test_cli.py (6)
+│   ├── test_errors.py (5)        test_manage.py (2)
+│   └── conftest.py               # hermetic plugin-registry isolation
 └── .github/
-    └── workflows/
-        ├── ci.yml                    # lint + test the CLI itself
-        └── release.yml               # publish resolvescript to PyPI + GH releases
+    ├── actions/                  # setup, ci, test, analyze, build, package,
+    │                             #   install, manage, update, extensions, fuse,
+    │                             #   plugin, workflow, release, security-scan,
+    │                             #   dependency-check, consolidate, build-installable
+    └── workflows/                # ci, nightly, release, build, dependencies,
+                                  #   fuse, security, workflow
 ```
+
+Note: `poetry.lock` is currently untracked and not referenced by
+`pyproject.toml` tooling; decide whether to commit, ignore, or delete it (§9).
 
 ---
 
-## 4. Manifest schema (v1)
+## 4. Manifest schema (v1.1)
 
-JSON is primary; XML is a 1:1 equivalent reader.
+JSON is primary. XML mirrors it for script + `<extension>` manifests; the
+workflow/fuse blocks are JSON-only today (§4.2). `docs/manifest.md` is the
+detailed reference; this section records the shape the plan depends on.
 
-### 4.1 `manifest.json`
+### 4.1 `manifest.json` — script
 
-```json
+```jsonc
 {
   "name": "my_extension",
-  "version": "1.0.2",                       // strict semver (MAJOR.MINOR.PATCH, optional -prerelease)
+  "version": "1.1.0",                       // strict semver
   "author": "You",
   "description": "Rotoscoping helper",
-  "python": "rotoscope",                    // import name of the package (optional)
-  "compat": {                               // Expo-style compatibility axis
-    "resolve": ">=18.5",                    // min DaVinci Resolve version (SemVer range)
+  "python": "my_extension",                 // import name (optional)
+  "id": "io.github.ose.my_extension",       // stable identity for `manage`
+  "kind": "script",                         // script | extension | workflow | fuse
+  "compat": {
+    "resolve": ">=18.5",                    // consumed by `update --fix`
     "python": ">=3.10"                      // min bundled Python
   },
   "package_dir": "src/my_extension",        // default: extension root
   "entrypoint": "my_extension.py",          // optional in-app script entry
-  "id": "io.github.ose.my_extension",       // stable identity for `manage` (name may change)
-  "release": {                              // source of `add`/`install <spec>` from a published artifact
+  "targets": ["Comp", "Utility"],           // Fusion/Scripts subfolders
+  "scripts_root": "",                       // parsed today, not yet consumed — §9
+  "release": {
     "owner": "OseMine",
-    "repo": "my_extension",                 // → resolves to github:OseMine/my_extension
-    "url": ""                               // optional exact artifact (tarball/zip) → overrides owner/repo
+    "repo": "my_extension",                 // → github:OseMine/my_extension
+    "url": ""                               // exact artifact, overrides owner/repo
   },
-  "targets": [
-    "Comp",                                 // Fusion/Scripts/Comp
-    "Utility"                               // Fusion/Scripts/Utility
-  ],
-  "scripts_root": "",                       // override OS detection (rare); see also RESOLVESCRIPT_SCRIPTS_ROOT
   "consolidate": {
     "enabled": true,
     "output": "my_extension.py",            // in dist/ and install
     "entry": "my_extension/__init__.py",
     "exclude": ["tests", "other_module"],
-    "no_comment": ["sys", "os"]             // never strip these imports
+    "no_comment": ["sys", "os"]
   },
-  "dependencies": [],                       // pip deps for dev/test only — never installable at runtime
+  "dependencies": [                          // parsed metadata today; not consumed
+    "github:someone/helper#semver:^1.2"      //   by add/install yet — see §9
+  ],
   "install": {
     "as_directory": true,                   // copy package dir vs single file
     "include": ["my_extension/**", "manifest.json"],
-    "exclude": ["**/__pycache__/**"]
+    "exclude": ["**/__pycache__/**"],
+    "to": "resolve"                         // resolve | framework
   }
 }
 ```
 
-### 4.2 `manifest.xml` (equivalent subset)
+### 4.2 `manifest.xml`
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<manifest>
-  <name>my_extension</name>
-  <id>io.github.ose.my_extension</id>         <!-- stable identity -->
-  <version>1.0.2</version>                   <!-- strict semver -->
-  <author>You</author>
-  <description>Rotoscoping helper</description>
-  <python>rotoscope</python>                 <!-- optional import name of the package -->
-  <compat>
-    <resolve>&gt;=18.5</resolve>
-    <python>&gt;=3.10</python>
-  </compat>
-  <package_dir>src/my_extension</package_dir>
-  <entrypoint>my_extension.py</entrypoint>
-  <targets>
-    <target>Comp</target>
-    <target>Utility</target>
-  </targets>
-  <scripts_root></scripts_root>              <!-- override OS detection (rare) -->
-  <consolidate enabled="true" output="my_extension.py">
-    <entry>my_extension/__init__.py</entry>
-    <exclude>tests</exclude>
-    <exclude>other_module</exclude>
-    <no_comment>sys</no_comment>
-    <no_comment>os</no_comment>
-  </consolidate>
-  <dependencies></dependencies>              <!-- pip deps for dev/test only; emitted code is stdlib-only -->
-  <install as_directory="true">
-    <include>my_extension/**</include>
-    <include>manifest.json</include>
-    <exclude>**/__pycache__/**</exclude>
-  </install>
-  <release>
-    <owner>OseMine</owner>
-    <repo>my_extension</repo>
-    <url></url>                              <!-- optional exact artifact, overrides owner/repo -->
-  </release>
-</manifest>
-```
+Equivalent subset, read by `xml.etree.ElementTree` into the same model. The
+XML reader currently models script fields plus the `<extension>` block; the
+`<workflow>` and `<fusion>` blocks are **JSON-only** today (both in the reader
+and in the scaffold templates). The `lua`, `workflow` and `fuse` scaffold
+flavors therefore emit JSON only, and `create --fmt xml` is ignored for them.
 
-### 4.3 Target folder mapping (per OS, from Rotoscope's `discovery.py`)
+### 4.3 Target folder mapping (per OS)
 
-| `target`  | Win (`%APPDATA%`) | macOS |
+| `target` | Windows (`%APPDATA%`) | macOS |
 |---|---|---|
-| `Comp`    | `Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts/Comp` | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts/Comp` |
+| `Comp` | `Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts/Comp` | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts/Comp` |
 | `Utility` | `…/Scripts/Utility` | same |
-| `Tool` / `Render` / `Deliver` / `Edit` / `WorkflowIntegrations` | similar subtrees | similar |
-| `root`    | `…/Scripts` (bare) | `…/Scripts` |
+| `Tool` / `Render` / `Deliver` / `Edit` / `WorkflowIntegrations` | similar subtrees | similar subtrees |
+| `Fusion` | `…/Scripts/Fusion` | same |
+| `root` | `…/Scripts` | same |
 
-Linux fallback: `~/.local/share/DaVinciResolve/Fusion/Scripts/…` (as in Rotoscope).
+Linux fallback: `~/.local/share/DaVinciResolve/Fusion/Scripts/…`.
 
-### 4.4 Workspace config — `resolvescript.json` (npm `package.json` analog)
+Fuses and workflow integrations do **not** use the Scripts root; they use the
+Fusion `Fuses/`/`Plugins/` and Workflow Integration Plugins directories.
 
-The consumer side. A committed file next to your code that declares which
-extensions this setup wants installed into Resolve. `install` materializes
-all of it; `add` edits it; `remove` edits it; `update` re-resolves it.
+### 4.4 Workspace config — `resolvescript.json`
+
+The consumer side, committed next to the project:
 
 ```json
 {
-  "name": "my-studio-resolve",             // workspace name (informational)
-  "dependencies": {                         // specifier → declared range/ref (package.json parity)
+  "name": "my-studio-resolve",
+  "dependencies": {
     "rotoscope": "github:OseMine/Rotoscope#v0.4.0",
     "lut_helpers": "https://example.com/lut_helpers-0.2.0.tgz",
-    "comp_tools": "^2.1.0",                 // registry/index range (dist-tag later)
-    "local-tools": "file:./tools/comp"      // local/workspace link — from this repo
+    "comp_tools": "^2.1.0",
+    "local-tools": "file:./tools/comp"
   },
   "install": {
     "targets": ["Comp", "Utility"],
-    "allow_remote": true,                   // supply-chain policy for URL/git sources
-    "scripts_root": ""                      // overrides OS detection; also RESOLVESCRIPT_SCRIPTS_ROOT
+    "allow_remote": true,
+    "scripts_root": ""
   }
 }
 ```
 
 Resolution rule (npm parity): recorded specifiers are the *declared* target;
 the resolved exact artifact lives in `.resolvescript/install.json` and wins
-while it still satisfies the recorded range. See §7 M5b.
+while it still satisfies the recorded range.
 
-### 4.5 Framework-extension manifest — `plugin.json` (a plugin, NOT a Resolve script)
+**Implementation status:** Fully wired. `workspace.py` reads/writes the complete
+`install` block (`targets`, `allow_remote`, `scripts_root`) with CLI/env
+precedence (see §5 `install` command).
 
-A **plugin extends the `resolvescript` CLI itself** and installs into the CLI
-config dir, never into Resolve (§0). It ships through the *same* pipeline as a
-script (same specifier grammar, tarball shape, SHA-256 integrity, registry) —
-only the manifest kind and install target differ.
+### 4.5 Plugin manifest — `kind: "extension"`
 
-```json
+A plugin extends the CLI and installs into the CLI config dir, never Resolve.
+Shipped form (also used by `create --template extension`):
+
+```jsonc
 {
-  "kind": "extension",                        // "script" (default) | "extension"
   "name": "resolvescript-lint",
   "version": "1.2.0",
-  "description": "Extra static checks for extensions",
-  "entry": "plugin.py",                       // loaded by the CLI at startup
-  "commands": ["analyze-extra"],              // registers new subcommands
-  "sources": ["registry:"],                   // registers new specifier kinds
-  "hooks": {                                  // lifecycle hooks in the pipeline
-    "pre_build": "hooks.on_pre_build",
-    "post_install": "hooks.on_post_install"
-  },
-  "templates": ["toolkit"],                   // new `create --template` flavors
-  "provides": ["mocks:resolve19"],            // extra sandbox mock modules
-  "requires": {
-    "resolvescript": ">=1.0.2",
-    "python": ">=3.9"
-  },
-  "install": {
-    "to": "framework"                         // ⇒ plugin dir, NOT a Resolve target
+  "kind": "extension",
+  "entrypoint": "resolvescript_lint.py",     // imported by the CLI at startup
+  "description": "Extra static checks",
+  "release": { "owner": "OseMine", "repo": "resolvescript-lint" },
+  "consolidate": { "enabled": false },
+  "install": { "to": "framework" },
+  "extension": {
+    "extension_kind": "commands",            // commands | sources | hooks | templates | provides
+    "commands": ["analyze-extra"],
+    "sources": ["registry:"],
+    "hooks": {
+      "pre_build": "hooks.on_pre_build",
+      "post_install": "hooks.on_post_install"
+    },
+    "templates": ["toolkit"],
+    "provides": ["mocks:resolve19"],
+    "requires": {
+      "resolvescript": ">=1.0.2",
+      "python": ">=3.9"
+    }
   }
 }
 ```
 
-Extension points (all optional): `commands`, `sources`, `hooks`, `templates`,
-`provides` (mocks). Loading is lazy — `plugins.py` imports `entry` and registers
-the contributed dispatch tables at CLI startup (`resolvescript --help` lists
-plugin commands). Version gate: `requires.resolvescript`/`python` must be met or
-the plugin is skipped with a warning (pytest-plugin model). Core stays lean:
-anything optional becomes a plugin, not a core feature (§9).
+A standalone `plugin.json` with the same fields is accepted for plugin-only
+projects. The entry module must expose `register_commands(parser)`.
+**`commands` and lifecycle hooks (`pre_build`, `post_install`) are wired;**
+`sources`, `templates` and `provides` are stored and round-tripped but
+have no dispatch table yet (see §9). Version gates skip a plugin with a
+warning rather than crashing the CLI.
+
+### 4.6 Workflow and fuse blocks
+
+Workflow (`kind: "workflow"`):
+
+```json
+"workflow": {
+  "id": "com.acme.deliver",
+  "name": "Deliver",
+  "version": "1.0.0",
+  "description": "Kick off a delivery render.",
+  "entrypoint": "my_pkg.workflow:INTEGRATION",
+  "callbacks": ["RenderStart", "RenderStop"],
+  "electron": true
+}
+```
+
+Fuse (`kind: "fuse"`):
+
+```json
+"fusion": {
+  "entrypoint": "my_pkg.fuse:FUSE",
+  "class_name": "Posterize",
+  "display_name": "Posterize",
+  "category": "Fuses\\Vendor\\Tool",
+  "icon_string": "PST",
+  "description": "Reduce an image to N levels.",
+  "tool_type": "CT_Tool",
+  "binary": "vendor/Krokodove.plugin"
+}
+```
+
+`binary` is a prebuilt `.plugin` carried/deployed, never compiled by this
+framework. A wrong `class_name` is a silent no-show in Fusion, so builds run a
+structural check always and `luac -p` when available.
+
+### 4.7 Environment overrides
+
+| Variable | Purpose |
+|---|---|
+| `RESOLVESCRIPT_SCRIPTS_ROOT` | Resolve Fusion Scripts root |
+| `RESOLVESCRIPT_FUSES_ROOT` | Fusion `Fuses/` directory |
+| `RESOLVESCRIPT_FUSION_PLUGINS_ROOT` | Fusion compiled `Plugins/` directory |
+| `RESOLVESCRIPT_WORKFLOWS_ROOT` | Workflow Integration Plugins directory |
+| `RESOLVESCRIPT_CONFIG_DIR` | CLI config dir / plugin registry |
+| `RESOLVESCRIPT_ALLOW_REMOTE` / `..._ALLOW_NETWORK` | supply-chain gate |
+| `RESOLVESCRIPT_MODULE`, `..._BUILT_PATH`, `..._TARGET`, `..._PYTHON`, `..._COMPAT`, `..._USER`, `..._VERSION` | test/scaffold substitution hooks |
+
+Other overrides: `--scripts-root`, `--root` on `fuse`/`workflow`. The
+`install.scripts_root` / `install.allow_remote` keys in `resolvescript.json`
+are documented but **not wired yet**; use the environment/CLI overrides above
+(§9). The manifest `scripts_root` field is likewise parsed but not consumed.
 
 ---
 
-## 5. Command reference (detailed)
+## 5. Command reference (as implemented)
 
-### `resolvescript create [--json|--xml] <name>`
-- Scaffold a new extension project in `./<name>` (or `--dir`).
-- Generates: manifest, package skeleton, empty test, `dev/` sandbox hook,
-  `scripts/` dir (if any), README stub, `.gitignore`.
-- `--template` picks a scaffold flavor (e.g. `minimal`, `toolkit`).
-- Fails if the directory exists and is non-empty.
+### Project commands
 
-### `resolvescript dev [--built] [--repl] [--editor]`
-- Loads manifest + package, injects mock `DaVinciResolveScript`, drops into the
-  sandbox REPL with `session`, `clips`, `resolve`, etc. preloaded.
-- `--built` tests the consolidated single file instead of the source package.
-- `--editor` prints a recommended Resolve-side script to run in-app.
+- **`create <name> [--json|--xml] [--dir DIR] [--template T]`**
+  Scaffolds `minimal`, `pydavinci`, `davinci-rest`, `lua`, `workflow`, `fuse`,
+  `ui`, `extension` (CLI plugin). Fails if the destination is non-empty.
+- **`dev [--built] [--repl] [--editor]`** — mock Resolve environment; `--built`
+  loads the consolidated file; `--editor` prints an in-app script.
+- **`test [--built] [-k PATTERN] [--api-coverage]`** — runs the project's
+  pytest suite with the mock injected; coverage reports used-vs-mocked methods.
+- **`analyze [--json]`** — syntax-compiles files, reports unused imports,
+  manifest issues, unmocked API calls, `GetAttrs()` keys and target typos.
+- **`build [--output PATH] [--installable] [--installer-template PATH]`** —
+  consolidates to `dist/`; `--installable` emits a Lua installer instead of
+  Python.
+- **`package [--dist DIR]`** — single file, manifest, `SHA256SUMS.txt`, and
+  `dist/<name>-<version>.tar.gz` in the shape `add` consumes.
+- **`consolidate <package-dir> --output PATH`** — manifest-free consolidation.
+- **`clean [--dir DIR] [-v]`** — caches, `dist/`, registries, `__pycache__`.
 
-### `resolvescript test [--built] [-k pattern]`
-- Runs pytest inside the extension; injects the mock environment via its
-  conftest; `--built` swaps the module under test for the consolidated file.
-- `--api-coverage` emits a report of used-vs-mocked Resolve API methods.
+### Dependency commands (scripts/plugins)
 
-### `resolvescript analyze [--json]`
-- Syntax-compiles every file, lists unused imports, checks manifest schema,
-  validates target names, reports calls to unmocked methods and missing
-  `GetAttrs()` keys used by the code.
+- **`add <spec> [--target NAME] [--no-save] [--scripts-root DIR]`** — resolve →
+  download → SHA-256 verify → stage → `py_compile` → install → record.
+  Idempotent; conflict detection.
+- **`install [<spec>] [--scripts-root DIR] [--locked] [--dry-run]`** — with no
+  spec, materialize `resolvescript.json` or install the current project; with a
+  spec, one-off install.
+- **`update [<name>] [--precise VERSION] [--fix]`** — advance within ranges;
+  `--fix` realigns installed artifacts to `compat`.
+- **`upgrade`** — alias for `update`.
+- **`remove <name> [--no-save]`** — uninstall tracked files and unrecord.
+- **`search <query>`** — known table + naming conventions.
+- **`manage list [--json]` / `manage remove <name> [--all]`** — low-level
+  registry operations against `.resolvescript/install.json`.
 
-### `resolvescript build [--output path]`
-- Port of Rotoscope `scripts/build.py`: collect package files, dependency
-  order, comment-out internal imports, hoist `from __future__ import …`,
-  verify with `py_compile`. Writes `dist/<manifest>.<output>`.
+### Diagnostics
 
-### `resolvescript consolidate <package-dir> [--output path]`
-- Standalone alias of `build` for arbitrary folders (no manifest needed).
-- This is the "glue" users can call from any repo on any package.
+- **`doctor [--scripts-root DIR] [--json]`** — 7 checks: interpreter, template
+  package-data, Scripts root, env overrides, project manifest, workspace,
+  install registry. Exit 1 on failure; library form `doctor.run_checks()`.
+- **`--version`, `--help`, `<cmd> --help`**; `-v` (info) / `-vv` (debug).
+- Exit codes: `0` ok, `1` error, `2` usage.
 
-### `resolvescript package [--dist dir]`
-- Build step, then assemble release artifacts into `dist/`:
-  single-file package, `manifest.json`, optional bundled `install.lua` /
-  `install.py`, `SHA256SUMS.txt`.
-- Emits a **`<name>-<version>.tgz`** in the exact shape `add`/`install <spec>`
-  consume (manifest.json + files at a single root layer) — this command is the
-  *publisher* side of the install model.
-- Prints the exact commands a CI release job can use.
+### Framework extensions (CLI plugins)
 
-### `resolvescript add <spec> [--target <name>] [--no-save]` (pnpm add / expo install)
-- Resolves `<spec>` (specifier grammar, §1) → downloads the artifact → verifies
-  SHA-256 → stages → `py_compile`s → installs into the Resolve Scripts root
-  per the extension's `targets` → records the specifier into `resolvescript.json`
-  (creating the file if absent).
-- Idempotent: re-adding an already-installed spec is a no-op or an upgrade
-  (npm reinstall / `expo install` behavior).
-- `--no-save` installs without touching `resolvescript.json` (cargo-install mode).
+- **`extensions add <spec> [--force]`** — same resolve/verify/stage pipeline,
+  then version-gate, write to the plugin dir and register in `plugins.json`.
+- **`extensions remove <name>`**, **`extensions list [--json]`**.
+- Plugin commands appear in `resolvescript --help`; unloadable plugins are
+  skipped with a warning.
 
-### `resolvescript install [<spec>] [--scripts-root <dir>] [--locked] [--dry-run]`
-- **No args**: materialize everything recorded in the nearest `resolvescript.json`
-  (npm `install` / `component install`). In an **extension project** (manifest
-  present), this installs the extension itself — author mode.
-- **With `<spec>`**: one-off install of that spec, no recording (cargo install).
-- `--scripts-root <dir>` overrides OS-detected root / `RESOLVESCRIPT_SCRIPTS_ROOT`.
-- `--locked` fails if already-resolved entries no longer satisfy the recorded
-  ranges (frozen-lockfile / `npm ci` semantics).
-- `--dry-run` shows the full diff (files to write + manifest edits) and exits
-  before writing anything.
-- Copies `manifest.json` alongside each install so the registry can track it.
+### Workflow integrations
 
-### `resolvescript update [<name>] [--precise <version>] [--fix]` (cargo update / expo install --fix)
-- Re-resolves recorded dependencies within their declared ranges and refreshes
-  the installed artifacts + registry (nothing to do when specs are already
-  satisfied — lockfile wins).
-- `--precise <version>` pins one dependency to an exact version.
-- `--fix` realigns installed versions to each extension's `compat`
-  (min Resolve/Python), the Expo `install --fix` model.
+- **`workflow build [--entrypoint PKG:ATTR] [--project-root DIR]`** — launcher
+  + optional Electron shell into `dist/`.
+- **`workflow install|install-script|install-plugin [--root DIR]`**,
+  **`list`**, **`uninstall`**, **`root`**, **`describe`**.
 
-### `resolvescript remove <name>` (npm uninstall)
-- Uninstalls the extension's tracked files (from the registry file list) and
-  removes its specifier from `resolvescript.json` (or `--no-save` to keep it).
+### Fusion fuses
 
-### `resolvescript search <query>`
-- Matches the built-in known-extension table + naming conventions
-  (`resolvescript-ext-<name>`, `<owner>/<repo>`); later: registry index.
+- **`fuse build [--out DIR] [--stdout] [--no-check]`** — render/validate Lua.
+- **`fuse install [--root DIR] [--dry-run] [--no-check]`**.
+- **`fuse package [--dist DIR] [--plugin PATH] [--name NAME] [--no-check]`** —
+  zip with checksum; can carry a prebuilt `.plugin`.
+- **`fuse list|uninstall|root [--which Fuses|Plugins] [--list]|describe`**.
 
-### `resolvescript doctor [--scripts-root <dir>] [--json]`
-- Diagnoses the setup: interpreter + template package-data, Scripts root
-  discovery, `RESOLVESCRIPT_*` env overrides, project manifest validity,
-  the `resolvescript.json` workspace, and the install registry.
-- Every check reports `ok`/`warn`/`fail`; `--json` for machine-readable
-  output; exit 1 when any check fails.
-- Library form: `ResolveScript.doctor.run_checks()`.
-
-### `resolvescript manage list | remove [--all]`
-- Low-level registry operations: `list` reads `.resolvescript/install.json`
-  (name/version/source/integrity/files/targets); `manage remove` deletes tracked
-  files without touching any config; `--all` also removes the registry.
-- Prefer top-level `update` / `remove` for normal use.
-
-### `resolvescript extensions add <spec> | remove <name> | list`
-- **Framework-extension (plugin) management only** — installs into the CLI
-  config dir `~/.config/ResolveScript/plugins/` (or
-  `%APPDATA%\ResolveScript\plugins\`), never into Resolve (§0, §4.5).
-  Override the config dir with `RESOLVESCRIPT_CONFIG_DIR`.
-- Same pipeline as `add` for scripts: resolve spec → download → SHA-256 verify →
-  stage → check `requires.resolvescript`/`python` → write plugin dir → refresh
-  the plugin registry (`plugins.json` next to the config dir, recording
-  source/integrity like the install registry).
-- `force`/`--force` re-installs; `remove` deletes the plugin dir + unregisters;
-  `list` shows name/version/commands (`--json` adds the full manifest).
-- New commands appear in `resolvescript --help`; plugins whose version gate
-  fails are skipped with a warning (never crash the CLI).
-
-### `resolvescript --version`, `resolvescript --help`, `resolvescript <cmd> --help`
+> **`resolvescript plugin install|list|uninstall`** is now implemented
+> (`--name`, `--target`, `--notes`, `--no-force`, `--dry-run`, `--root`, `--json`).
+> See `docs/plugin.md`.
 
 ---
 
 ## 6. Design decisions / open questions
 
-1. **CLI library**: `argparse` (zero deps, matches Rotoscope style) vs `Typer`
-   (nicer UX). Default: **argparse** to keep `pip install resolvescript` light;
-   revisit if command surface grows beyond ~10 subcommands.
-2. **Mock fidelity**: sandbox `api.py` mirrors the methods the Rotoscope
-   toolkit calls, NOT the full Resolve API. Extensions calling other methods
-   get `NotImplementedError` which `analyze`/`test` surface. Add methods
-   on demand per-extension via manifest `sandbox.mocks` initially (future:
-   auto-generated mock, see Backlog).
-3. **Repo-local install**: `install --scripts-root <dir>` (or a `resolvescript.json`
-   with `install.scripts_root`) targets a project-local copy instead of the
-   Resolve folder — the drop-in-distribution case (former `--project`).
-   Installing into a Resolve *database* project is only possible via the Resolve
-   API at runtime, so the CLI ships the Lua/Python "register in project" helper
-   as an in-app script, not a CLI operation.
-4. **XML reader**: `xml.etree.ElementTree` stdlib only; validate against the
-   same model as JSON; no XSD.
-5. **Python target**: framework runs on dev machines (≥3.9 to match
-   Rotoscope's `py39` ruff target). Generated extensions target the
-   Resolve-bundled interpreter (≥3.10, Resolve 18.5+) → keep generated code
-   to **stdlib-only** at runtime; manifest `dependencies` are dev/test-only.
-   CI compiles all templates/emitted files under `--target-version py310`.
-6. **Release/nightly CI for this repo**: reuse the shared
-   `OseMine/workflows` actions (`ci`, `release-all`) that Rotoscope already
-   uses, with `language: python`. Verify these actions exist and their
-   contract matches before wiring `release.yml`.
-7. **Extension install is a package manager, not a copy** (npm / pnpm /
-   `tauri add` / `expo install`). The CLI is symmetric: **author** side is
-   `build` + `package` (publishes the tarball); **consumer** side is
-   `add` / `install <spec>` / `update` / `remove` / `search`. Resolve/Python
-   compatibility is handled the way Expo does SDK compatibility: `update --fix`.
-8. **Two-layer state (npm parity)**: declared specifiers/ranges live in the
-   committed `resolvescript.json`; exact pins — `resolved` URL, git commit/ref,
-   and `integrity` SHA-256 — live in `.resolvescript/install.json`. Rule:
-   the resolved entry wins while it still satisfies the recorded range, else
-   the recorded range wins and a re-resolve happens.
-9. **No central registry in v1** (Tauri model): a hardcoded known-extension
-   table + `<owner>/<repo>` naming conventions + arbitrary URLs cover the
-   "registry" case day one. A static JSON index (`registry.resolvescript.dev`)
-   with dist-tags and per-version `compat` is the v0.2 upgrade path — still no
-   server needed either way.
-10. **Archive over git (pnpm)**: public repos are fetched via
-    `codeload`/`tar.gz` with pure-`urllib` (stdlib-only, no `git` dependency);
-    the `git` CLI is only a fallback (`--depth 1 --branch/--rev`). `#semver:`
-    ranges resolve against release tags.
-11. **Mandatory integrity**: unlike npm's optional `integrity`, Resolve
-    *executes* every installed `.py` on demand, so SHA-256 verification of
-    every artifact is non-negotiable; provenance (`resolved` URL + commit/ref)
-    is recorded alongside. Supply-chain policy: `install.allow_remote` gates
-    URL/git sources (npm 12 `allow-remote` precedent).
-12. **Install-time codegen is idempotent** (Tauri pattern): menu entry / Lua
-    installer wiring is rendered during `add`/`install`, and skipped when
-    already present — never duplicated across re-installs.
-13. **Resolve scripts vs framework extensions are one pipeline, two targets**
-    (§0, §4.5): a plugin is a script whose `kind`/`install.to` points at the
-    CLI config dir. Same resolver, supply chain, integrity and registry —
-    `extensions add` reuses `add`'s internals with a different destination,
-    version gate and entry-point loader.
+1. **CLI library** — `argparse`, zero dependencies. Revisit only if the command
+   surface grows beyond comfortable single-parser size; so far it has not.
+2. **Mock fidelity** — the sandbox mirrors the Resolve API the toolkit uses, not
+   the full API. Unmocked calls raise `NotImplementedError`; `analyze` and
+   `--api-coverage` surface them. Auto-generation is backlog (§9).
+3. **Repo-local install** — `--scripts-root` (and, once wired,
+   `install.scripts_root`) targets a project-local copy. Installing into a
+   Resolve *database* project is only possible via the Resolve API at runtime,
+   so the in-app registration helper is shipped as a script, not a CLI
+   operation.
+4. **XML reader** — stdlib `xml.etree.ElementTree`; same model as JSON for
+   script/extension fields; no XSD.
+5. **Python target** — framework runs on ≥3.9; generated extensions target the
+   Resolve-bundled interpreter (≥3.10 for Resolve 18.5+) and stay stdlib-only at
+   runtime. Manifest `dependencies` are metadata only today (not resolved by
+   the installer — §9).
+6. **Release/nightly CI** — `.github/workflows/` plus reusable composite actions
+   in `.github/actions/`; `release.yml` builds, type-checks, generates notes and
+   publishes (PyPI behind the repo variable / OIDC trusted publishing).
+7. **Extension install is a package manager** — author side: `build` +
+   `package`; consumer side: `add` / `install <spec>` / `update` / `remove` /
+   `search`.
+8. **Two-layer state** — declared specs/ranges in `resolvescript.json`; exact
+   pins (`resolved` URL, git ref, `integrity` SHA-256) in
+   `.resolvescript/install.json`. Lockfile wins while it satisfies the range.
+9. **No central registry in v1** — hardcoded known table + `owner/repo` +
+   arbitrary URLs. A static JSON index with dist-tags and per-version `compat`
+   remains the v2 path.
+10. **Archive over git** — public repos fetch via codeload/tar.gz with pure
+    `urllib`; `git` CLI only as fallback. `#semver:` resolves release tags.
+11. **Mandatory integrity** — every installed `.py` can be executed on demand, so
+    SHA-256 verification is non-negotiable. Provenance is recorded alongside.
+12. **Idempotent install-time codegen** — menu entry / Lua installer wiring is
+    rendered during `add`/`install` and skipped when already present.
+13. **Scripts and plugins are one pipeline, two targets** — same specifier,
+    fetch, verify, stage and registry shape; different destination and gate.
+14. **UI is declarative and retained** — one node tree, three authoring modes
+    (functions, dicts/JSON, `Component` classes), rendered through
+    `FusionBackend` (real UIManager) or `MockBackend` (headless tests). Keyed
+    reconciliation patches only changed native props, preserving focus, caret,
+    scroll, selection and tree expansion.
+15. **Fuses are rendered, not copied** — a Python `Fuse` declaration emits
+    ASCII-only Lua. Validation is two-layer: structure always, `luac -p` when
+    available. `.plugin` binaries are deploy/package/remove only.
+16. **Workflows are script-first** — the portable Python launcher works on
+    Linux and uses `ResolveScript.ui`; the Electron shell is optional and
+    Windows/macOS Studio-only. The script is the brain; the shell is a bridge.
+17. **Templates are file trees** — `@NAME@`/`@VERSION@` placeholders are copied,
+    not rendered by Jinja; `.j2` files are optional installer/manifest
+    templates. `minimal` maps to the `extension/` directory (script) while
+    `extension` maps to `plugin/` (CLI plugin) to avoid the §0 name collision.
+18. **Plugins are isolated** — a broken plugin, missing hook, bad version gate
+    or corrupt registry is a warning, never a CLI crash. Tests isolate the
+    host's plugin registry via `tests/conftest.py`.
+19. **Docs are part of the contract** — command surfaces and version strings
+    must match the implementation; `doctor` checks templates/env/registry, and
+    the release workflow type-checks.
 
 ---
 
-## 7. Milestones & TODO checkboxes
+## 7. Milestones
 
-### M0 — Repo bootstrap ✔
-- [x] Create `src/ResolveScript/` package, `pyproject.toml` (name `resolvescript`, entry point `resolvescript = ResolveScript.cli:main`), README stub, LICENSE
-- [x] `__version__`, `ResolveScript/__init__.py`
-- [x] `cli.py` with argparse parent wiring: `create dev test analyze build package install manage consolidate extensions --version`
-- [x] `.gitignore` (+ `dist/`, `*.egg-info`, `__pycache__`)
-- [x] CI: `nightly.yml` runs the shared `OseMine/workflows` `ci` action on a
-      schedule; `release.yml` runs `ruff` + `mypy` + `pytest` over 3.9-3.12 on
-      tags. (`ci.yml`/`workflow.yml` are consumer examples, not this repo's CI)
+### Shipped: M0–M10 (v0.1.0 → v1.0.2; M5c completed in v1.1.0)
 
-### M1 — Manifest model & readers ✔
-- [x] `manifest/model.py`: dataclass `Manifest`, `ConsolidateConfig`, `InstallConfig`, enums for valid `targets`
-- [x] `manifest/json_reader.py`: load + normalize + error reporting (with file/line hints)
-- [x] `manifest/xml_reader.py`: ElementTree → same model
-- [x] `manifest/validation.py`: required fields, target-name whitelist, semver format, output-path sanity, `release`/`compat` presence when `add`/`install <spec>`/`update` used
-      (note: release presence is enforced for `kind=extension` manifests; `compat` is consumed by `update --fix` rather than hard-required at `add` time)
-- [x] Tests: `test_manifest.py` (JSON round-trip, **kitchen-sink JSON↔XML parity**, malformed inputs)
+| Milestone | Outcome | Evidence |
+|---|---|---|
+| **M0** Repo bootstrap | package, CLI skeleton, CI/release workflows | `pyproject.toml`, `.github/` |
+| **M1** Manifest | dataclass model, JSON + XML readers, validation | `test_manifest.py` |
+| **M2** Scaffolder | `create`, JSON/XML manifests, template copy engine | `test_scaffold.py` |
+| **M3** Consolidator | generic import rewriting, dependency order, `py_compile` | `test_consolidate.py` |
+| **M4** Sandbox | fake Resolve API, env injection, smoke, REPL, fixtures | `test_sandbox.py` |
+| **M5** Installer core | per-OS roots, atomic install, registry, conflicts | `test_install.py` |
+| **M5b** Sources/lockfile | spec grammar, semver, known/archive/git/path/release, SHA-256, `resolvescript.json` | `test_runtime.py` |
+| **M5c** Framework extensions | plugin manifest/gate/loader/registry, `extensions add/remove/list` | `test_plugins.py` |
+| **M6** Analyzer | syntax/import/manifest/API checks, `--json`, `--api-coverage` | `test_analyze.py` |
+| **M7** Packager | tar.gz single-root artifact + `SHA256SUMS.txt` | `test_package.py` |
+| **M8** Manager/polish | `manage`, cross-platform paths, help/exit codes, e2e author+consumer | `test_manage.py`, `test_cli.py` |
+| **M9** Publish/docs | 1.0.2 wheel/tag/release, README/manifest/specifier docs | tag `v1.0.2` |
+| **M10** Hardening | `ResolveScriptError` taxonomy, `py.typed` + mypy, `doctor`, logging | `test_errors.py`, `test_doctor.py` |
 
-### M2 — Scaffolder (`create`) ✔
-- [x] `templates/extension/` skeleton (package dir, `__init__.py`, sample module, empty `tests/`, `.gitignore`)
-- [x] Template for `manifest.json` + `manifest.xml`
-- [x] Copy engine with `--json|--xml` and `--dir`/`--name` handling
-- [x] `resolvescript create` end-to-end: scaffold → `ls` → shows next steps; scaffolded project passes `test` and `build` immediately
-- [x] Tests: `test_scaffold.py::test_cli_create_end_to_end` plus the author-flow e2e (`create → … → remove`) in `test_cli.py`
+### M11 — Fusion fuses and `.plugin` deployment — shipped
+Tag `v0.6.0`; documented in 1.0.0.
+- [x] `Fuse`/`Control` declaration model + ASCII Lua renderer
+- [x] Structural validation always, `luac -p` when available
+- [x] `fuse build|install|package|list|uninstall|root|describe`
+- [x] Per-OS Fuses/Plugins roots with env + `--root` overrides
+- [x] Checksummed `.zip` packaging; optional prebuilt `.plugin` carried along
+- [x] `BinaryPlugin` deploy/package model (no source build)
+- [x] `create --template fuse` scaffold + smoke test
+- [x] `test_fuse.py` (130 test functions)
 
-### M3 — Consolidator (`build`, `consolidate`) ✔
-- [x] Port `scripts/build.py` into `consolidate.py` as generic functions:
-      `collect_python_files(root, exclude)`, `extract_imports`,
-      `strip_internal_imports`, `_statement_open`, dependency-ordered emission,
-      `__future__` hoisting, `py_compile` verification
-- [x] Import-rewriting edge matrix (test each): `import x`, `from x import y`,
-      `import x as z`, relative imports, `__init__` re-exports vs side-effect
-      imports, circular deps, `if TYPE_CHECKING` guards, `__all__`-controlled
-      exports
-- [x] Consolidated output is an **importable library** consumed by the
-      manifest `entrypoint`; standalone/`__main__` blocks are an error
-- [x] Manifest-driven config: `entry`, `output`, `exclude`, `no_comment`
-- [x] `build` writes `dist/<output>` from manifest; `consolidate` works manifest-free
-- [x] Test parity with Rotoscope: no un-commented relative imports in output; built module imports; API parity source-vs-built
-- [x] Tests: `test_consolidate.py`
+### M12 — Declarative UI framework — shipped
+Tag `v1.0.0`.
+- [x] Node tree + widget specs for Fusion UIManager
+- [x] Three authoring modes: functions, dicts/JSON, `Component` classes
+- [x] Retained, keyed rendering with targeted prop patches
+- [x] Two-way binding, `Value`/state, events, `rows()` table helpers
+- [x] Theming (light/dark, Qt stylesheets), native escape hatch
+- [x] `FusionBackend` + headless `MockBackend` with UI test helpers
+- [x] `create --template ui` scaffold
+- [x] `docs/ui.md` + `test_ui.py` (141 test functions)
 
-### M4 — Sandbox (`dev`, `test` harness) ✔
-- [x] Port mock API objects (`api.py`): FakeResolve, FakeProjectManager, FakeProject, FakeTimeline, FakeClip, FakeMediaPool*, FakeComp, FakeTool, FakeSpline, FakeStroke
-- [x] `env.py`: `build_default_env()`, `install_fake_resolve()` (sys.modules injection), idempotent re-install
-- [x] `smoke.py`: generic `run_smoke(module)` that walks the extension's public API (or manifest-declared exports) so it works for ANY package, not just Rotoscope
-- [x] `repl.py`: interactive namespace (clips, resolve, project, timeline, module)
-- [x] `dev` command wired (source + `--built`)
-- [x] `testing/fixtures.py`: pytest fixtures `sandbox`, `load_source_module`, `load_built_module`
-- [x] Scaffolded projects get a working `conftest.py` + smoke test out of the box
-- [x] Tests: `test_sandbox.py`
+### M13 — Workflow Integrations — shipped
+Tag `v1.0.0`.
+- [x] `Integration`/`Context` declaration and `Harness`
+- [x] Portable Python launcher (Linux) + optional Electron shell
+- [x] JSON line protocol between shell and Python
+- [x] `RenderStart`/`RenderStop` callbacks
+- [x] Separate Workflow Integration Plugins root + discovery
+- [x] `workflow build|install|install-script|install-plugin|list|uninstall|root|describe`
+- [x] `create --template workflow`; `docs/workflow.md`
 
-### M5 — Installer core (author + local) ✔
-- [x] `install.py` logic ported: per-OS scripts-root discovery into `discovery.py`
-      (also reads `RESOLVESCRIPT_SCRIPTS_ROOT` env override); `install_package`
-      (dir vs single-file); `install_project`
-- [x] Manifest-driven: `targets`, `install.include/exclude` (glob patterns), `entrypoint`, `as_directory`
-- [x] Atomic install: stage files to temp dir → `py_compile` staged entry file →
-      rename into `Scripts/<target>/` (fail cleanly on any step; never leave
-      partial installs; pyc written outside the stage so it never ships)
-- [x] Overwrite-conflict detection: warn and abort if two extensions install
-      the same relative path to the same target (`--force` overrides)
-- [x] Registry: write `.resolvescript/install.json` (include `schema_version`,
-      `id`, name, version, **`source`/`resolved` URL, `integrity` SHA-256**,
-      `files[]`, `targets[]`, `compat`, `installed_at`) + copy `manifest.json`
-- [x] `--scripts-root <dir>` install into any root (repo-local = drop-in dist)
-- [x] `manifest.release.{owner,repo,url}` → GH release-asset download path (in M5b `sources`)
-- [x] In-app helper script template registering a script into the open Resolve project
-- [x] Tests: `test_install.py` on a fake scripts-root (tmp_path)
+### M14 — Templates, Lua installer, GitHub Actions — shipped
+- [x] Templates: `minimal`, `pydavinci`, `davinci-rest`, `lua`, `workflow`, `fuse`, `ui`, `extension`
+- [x] `build --installable` Lua installer + custom `installer.lua.j2`
+- [x] In-app registration helper template
+- [x] Composite actions for setup/test/analyze/build/package/install/manage/update/extensions/fuse/plugin/workflow/release/security/deps
+- [x] Consumer example workflows in `.github/workflows/`
+- [x] `docs/templates.md`, `docs/installer.md`, `docs/github-actions.md`
+- [x] `test_installer_lua.py` (13 test functions)
 
-### M5b — Package sources, resolver & lockfile (consumer side) ✔
-- [x] `resolver.py`: specifier grammar + dispatch order (registry-or-known →
-      manifest-URL → archive → git → path) + SemVer range parse/match
-- [x] `sources/known.py`: hardcoded known-extension table + naming conventions
-      (`owner/repo` ⇒ `github:`, `resolvescript-ext-<name>`) — Tauri model
-- [x] `sources/git.py`: codeload archive preferred, `git` CLI fallback
-      (`--depth 1 --branch/--rev`); `#semver:<range>` resolved over release tags
-- [x] `sources/archive.py` + `sources/path.py`: unpack tar.gz/zip (manifest.json
-      + files at single root layer); `file:`/`./dir` workspace links
-- [x] `fetch.py`: `urllib` download + **mandatory SHA-256 verify**; reject
-      mismatches before anything touches the Scripts root; `allow_remote` gate
-- [x] `registry.py`: read/write `.resolvescript/install.json`; lockfile-wins
-      resolution rule (§6.8); `--locked` support
-- [x] `workspace.py`: read/write `resolvescript.json` deps (add/remove specifiers)
-- [x] `add <spec>` e2e: resolve → download → verify → stage → py_compile →
-      install → record; idempotent; conflict-flagged
-- [x] `install` no-args e2e: materialize all recorded deps (npm-install style)
-- [x] `update [name] [--precise <version>] [--fix]`: advance within ranges;
-      `--fix` realigns to `manifest.compat` (Expo `install --fix`)
-- [x] `remove <name>`: uninstall via registry file list + unrecord
-- [x] `search <query>`: match known table + conventions
-- [x] Install-time codegen (in-app menu script / Lua installer) idempotent
-      during `add`/`install` (skip if wiring already present; register.py from M4)
-- [x] Tests: `test_runtime.py` (spec/semver/resolver/workspace/CLI e2e from a
-      `package`-shaped tarball), `test_cli.py`, `sources.archive` round-trip
+### M15 — v1.1.0 release and plugin hardening — shipped
+Tag `v1.1.0` (2026-10-08).
+- [x] Unified `ResolveScriptError` taxonomy + contract test
+- [x] `py.typed`, mypy config, 71 source files clean, type-check step in release
+- [x] `doctor` (7 checks) + `-v`/`-vv` namespaced logging
+- [x] M5c plugin management: `extensions add/remove/list`, version gate, isolation
+- [x] XML `<extension>` block parity
+- [x] `clean` command and `upgrade` alias
+- [x] `create --template extension` plugin scaffold
+- [x] `examples/resolvescript-lint` acceptance artifact
+- [x] Version/doc drift fixes from the 1.0.2 audit
 
-### M5c — Framework extensions (plugins) — CLI itself, not Resolve ✔
-> Completed post-1.0.2 (see M10). Reuses everything from M5/M5b: one
-> specifier pipeline, integrity and packaging pipeline, two install targets.
-- [x] `manifest/model.py`: `kind` = `"script" | "extension"` + `extension_kind`
-      (`commands`/`sources`/`hooks`/`templates`/`provides=mocks`) + `install.to`
-      (`resolve` targets vs `framework`) + `requires` gate — §4.5 schema
-      (`manifest.xml` reads the matching `<extension>` block)
-- [x] `plugins.py`: plugin config dir discovery (`~/.config/ResolveScript/plugins/`
-      / `%APPDATA%\ResolveScript\plugins\`, overridable via
-      `RESOLVESCRIPT_CONFIG_DIR`), lazy `entry` import, contribution
-      registration into CLI dispatch at startup
-- [x] Plugin registry (same shape as `.resolvescript/install.json`, incl.
-      `source`/`integrity`, but stored next to the CLI config as `plugins.json`)
-- [x] `extensions add` (reuses `add` internals with `to: framework`):
-      resolve → verify SHA-256 → version-gate check → write plugin dir →
-      register; `--force` reinstall; a standalone local `plugin.json`
-      directory installs directly
-- [x] `extensions remove <name>` / `extensions list [--json]`
-- [x] Failure isolation: unloadable/bad-version plugin is skipped with a warning,
-      never crashes the CLI (missing hook and corrupt registry covered too)
-- [x] First-party example plugin (`examples/resolvescript-lint` registering an
-      `analyze-extra` command) used as the e2e acceptance artifact
-- [x] Tests: `test_plugins.py` (gate, isolation, contribution registration) +
-      e2e add/list/remove of the example plugin; suite isolated from
-      host-installed plugins via `tests/conftest.py`
+### M16 — Current truth pass — **completed (2026-10-23)**
+- [x] Refresh this plan against the actual v1.1.0 tree (2026-10-23)
+- [x] Record post-plan milestones M11–M15 and the real CLI/library surface
+- [x] Deduplicate the backlog and re-rank known gaps
+- [x] Fix the documentation/code mismatches listed in §9:
+  - [x] `resolvescript plugin install|list|uninstall` CLI group implemented
+  - [x] `docs/plugin.md` created
+  - [x] README version table updated (`v1.0.2` → `v1.1.0`)
+  - [x] `create --help` template choices synced with `scaffold.py` (`extension` added)
+  - [x] `docs/templates.md` updated (`ui`, `extension`, JSON-only note)
+- [x] `poetry.lock` removed (CI uses `pip`/`pyproject.toml`)
+- [x] Full suite recorded in `CHANGELOG.md` (557 passed, 3 skipped; ruff/mypy clean)
+- [x] Refactored `plugins.py` → `src/ResolveScript/extensions/` package (config, errors, hooks, loader, manager, manifest, registry)
 
-### M6 — Analyzer (`analyze`) ✔
-- [x] Syntax compile all files; collect unused imports; manifest validation report
-- [x] Detect `GetAttrs()` key reads vs known mock keys; list unmocked API calls
-- [x] Target-name validation + recommended fix (`Utility` vs `Tool` etc.)
-- [x] `--json` machine-readable output
-- [x] `--api-coverage` on `test` command runs the analyzer's API report
-- [x] Tests: `test_analyze.py` (analyzer + `test` command e2e)
-
-### M7 — Packager (`package`) + release pipeline ✔
-- [x] `package.py`: copy `manifest.json` + entrypoint + package dir into
-      `dist/<name>-<version>.tar.gz` (single root layer) + write `SHA256SUMS.txt`
-- [x] Archive shape is identical to what `add`/`install <spec>` consume
-- [x] Tests: `test_package.py` (artifact set + checksum round-trip)
-
-### M8 — Manager (`manage`) + polish ✔
-- [x] `manage list` (name/version/source/integrity/targets/files per installed ext), `manage remove`, `remove --no-save`
-- [x] Cross-platform paths coverage: Windows/macOS/Linux discovery unit tests
-- [x] Full CLI help text, exit codes (0 ok / 1 error / 2 usage), colored output guard (ASCII-safe prints)
-- [x] Shared **kitchen-sink** extension fixture (superseded: the scaffold-based e2e
-      flows exercise every manifest option in `tests/test_cli.py` and `test_runtime.py`)
-- [x] End-to-end acceptance test — **author** flow:
-      `create → dev --built → test → build → package → install (tmp fake root) →
-      manage list → remove`
-- [x] End-to-end acceptance test — **consumer** flow (M5b):
-      package a fixture → host it on a local file/http source → `add <spec>`
-      → `manage list` → `update` to a new version → `install --locked` on a
-      second workspace (npm-ci path) → `remove`
-- [x] `README.md` with quickstart, manifest reference, command + specifier reference
-- [x] CHANGELOG
-
-### M9 — Publish & docs ✔
-- [x] `python -m build` verified: `resolvescript-1.0.2.tar.gz` + `resolvescript-1.0.2-py3-none-any.whl`
-      built cleanly; wheel installs and runs `resolvescript --version` + `create` on a fresh venv.
-      CI release workflow (`release.yml`) wired: `push tags: v*` runs the shared
-      `release-all` action (`language: python`) which builds the wheel, generates
-      checksums and a GitHub release; PyPI publishing requires a `PYPI_ENABLED`
-      repo variable and OIDC trusted publishing on pypi.org.
-- [x] Tag `v1.0.2`; push the tag to trigger the release pipeline (tag exists,
-      released 2026-10-08)
-- [x] Docs: `README.md` quickstart + manifest reference + specifier reference;
-      `CHANGELOG.md` captures the full v1.0.2 feature set
-
-### M10 — Post-release hardening (audit response) ✔
-- [x] Unified error taxonomy: `ResolveScriptError` base under all 23 domain
-      errors (historic bases preserved via multiple inheritance, so
-      `except ValueError`/`RuntimeError` handlers keep working) + contract
-      test over `__all__` (`rs.ResolveScriptError`)
-- [x] `py.typed` marker (verified in the built wheel) + `[tool.mypy]`;
-      63 type errors fixed across 12 files; `release.yml` gained a
-      `Type check` step (bare `mypy`, 71 source files clean)
-- [x] `resolvescript doctor [--scripts-root DIR] [--json]` — 7 checks
-      (interpreter, templates, scripts root, env overrides, manifest,
-      workspace, registry); exit 1 on failure; library form
-      `ResolveScript.doctor.run_checks()` + 13 tests
-- [x] Namespaced logging (`ResolveScript.*` logger hierarchy) at resolver
-      dispatch / download / cache / install / write points, surfaced on the
-      CLI with `-v` (info) and `-vv` (debug)
-- [x] Doc-drift fixes: README "Python 3.12+" → 3.9+, package docstring
-      example (`load_manifest` + `config_from_manifest`), Library API
-      error-taxonomy docs, CHANGELOG Unreleased entries
+### M17 — Ready for next release
+- [ ] Cut v1.1.1 patch release (P0 maintenance complete)
+- [ ] Begin P1 backlog: wire `sources`/`hooks`/`templates`/`provides` plugin contribution points
 
 ---
 
 ## 8. User workflows (acceptance scenarios)
 
-**As a Resolve script author:**
+**As a Resolve script author**
 1. `pip install resolvescript`
 2. `resolvescript create my_roto_tools && cd my_roto_tools`
 3. Write code in `my_roto_tools/`, edit `manifest.json`
 4. `resolvescript dev` — iterate against the mock, no Resolve needed
-5. `resolvescript test` — green
-6. `resolvescript analyze` — clean report
-7. `resolvescript build` — got `dist/my_roto_tools.py`
-8. `resolvescript install` — installed into Fusion Scripts/Comp; Restart Resolve → Workspace > Scripts
-9. `resolvescript manage list` — confirm entry
+5. `resolvescript test` — green; `analyze` — clean
+6. `resolvescript build` → `dist/my_roto_tools.py`
+7. `resolvescript install` → Fusion Scripts/Comp; restart Resolve
+8. `resolvescript manage list` — confirm entry
 
-**As a consumer of someone else's extension (package-manager style):**
-1. `resolvescript add github:OseMine/rotoscope`
-   — resolves the spec, downloads the artifact, verifies SHA-256, installs
-   into Fusion Scripts/Comp, records `"rotoscope": "github:OseMine/rotoscope"`
-   in `resolvescript.json`
-2. `resolvescript update rotoscope` — fetch a newer release within the range
-3. `resolvescript search comp` — find extensions
+**As a consumer (package-manager style)**
+1. `resolvescript add github:OseMine/rotoscope` — resolve, verify SHA-256,
+   install, record in `resolvescript.json`
+2. `resolvescript update rotoscope` — newer release within the range
+3. `resolvescript search comp` — discover
 4. `resolvescript remove rotoscope` — uninstall + unrecord
 
-**Reproducible studio setups (npm-install style):**
-1. Commit `resolvescript.json` declaring your studio's extension set
-2. On a fresh machine: `resolvescript install` — every recorded dependency is
-   fetched, integrity-verified, and installed into the local Resolve;
-   `resolvescript manage list` confirms the set
-3. CI-safe reinstall: `resolvescript install --locked` reproduces the exact
-   recorded artifact versions
+**Reproducible studio setups**
+1. Commit `resolvescript.json`
+2. Fresh machine: `resolvescript install` — fetch, verify, install
+3. CI-safe: `resolvescript install --locked`
 
-**As a ResolveScript framework user (extending the CLI, M5c):**
-1. `resolvescript extensions add github:OseMine/resolvescript-lint`
-   — installs the plugin into the CLI config dir (never Resolve), version
-   gate checked
-2. `resolvescript analyze-extra …` — the new command exists
-3. `resolvescript extensions list` → confirms the plugin
-4. `resolvescript extensions remove resolvescript-lint` — uninstalls
+**As a framework-extension author/user**
+1. `resolvescript create my-lint --template extension`
+2. Implement `register_commands(parser)`, `package`/release it
+3. `resolvescript extensions add github:you/my-lint` — version-gated, into the
+   CLI config dir (never Resolve)
+4. New command appears in `resolvescript --help`
+5. `extensions remove my-lint`
 
----
+**As a Fusion fuse author**
+1. `resolvescript create Posterize --template fuse`
+2. Edit `FUSE = Fuse(...)`
+3. `resolvescript fuse build` — structural check (+ `luac -p` when available)
+4. `resolvescript fuse install` — restart Resolve
+5. `resolvescript fuse package` — checksummed zip, optional `.plugin` alongside
 
-## 9. Backlog / future ideas
+**As a workflow-integration author**
+1. `resolvescript create Deliver --template workflow`
+2. Declare `INTEGRATION = Integration(...)` and a `build_ui(context)` screen
+3. `resolvescript workflow build` → launcher + Electron shell
+4. `resolvescript workflow install` → `Workspace > Workflow Integrations`
 
-**Policy:** core stays lean — every optional feature below is a *candidate
-framework extension* (M5c plugin), not a core command, unless it grows enough
-demand to be promoted.
-
-- [ ] Auto-generate mock methods from real `DaVinciResolveScript.py` (parse the bundled module) so `dev`/`test` never `NotImplementedError` — could ship as a plugin (`provides: mocks:*`)
-- [ ] Auto-generate mock methods from real `DaVinciResolveScript.py` (parse the bundled module) so `dev`/`test` never `NotImplementedError`
-- [ ] `resolvescript publish <ext>` — push a built extension to a release / registry index without manual CI
-- [ ] Static registry index (`registry.resolvescript.dev/extensions.json`):
-      dist-tags, per-version `compat`, archive URL pattern — upgrades `search`
-      and `update` beyond the hardcoded known table
-- [ ] `resolvescript validate <dir>` — cheap one-shot manifest + code check for first-time users (candidate plugin)
-- [ ] `resolvescript watch` — rebuild + re-install on file change (hot dev loop; candidate plugin)
-- [ ] Lua command mirror (`resolvescript lua-script manifest.xml`) bundling a Lua installer into the extension (candidate plugin)
-- [ ] Windows context-menu integration (`Add to Resolve Scripts`)
-- [ ] TOML manifest support if demand appears (candidate plugin)
+**As a UI author**
+1. `resolvescript create Panel --template ui`
+2. Compose `Window`/`Column`/`Row`/`Button`/`Value`
+3. Test headlessly with `MockBackend` (`require`, `fire`, `type_into`, `rows`)
+4. `resolvescript package` and ship; the same tree renders in Resolve
 
 ---
 
-## 10. Definition of done
-- `pip install resolvescript` works from PyPI.
-- All 9+ commands function end-to-end on Windows + macOS (primary) and Linux (best effort).
-- The automated acceptance tests — **author** and **consumer** flows (§8) — are green in CI.
-- Every install is integrity-verified (SHA-256) before the Resolve Scripts folder
-  (or the CLI plugin dir) is touched.
-- Docs cover every command + the specifier grammar with examples, and the
-  **§0 terminology split** (Resolve script vs ResolveScript extension) is
-  reflected everywhere.
-- Framework-extension support (M5c) is v0.2+; the v0.1 core already
-  distinguishes `kind`/install targets so nothing ships that conflates the two.
+## 9. Backlog / known gaps
+
+**Policy:** core stays lean — optional features are candidates for a framework
+extension (M5c plugin), not core commands, unless demand justifies promotion.
+
+### P0 — truth and correctness (M16) — **all complete**
+
+- [x] Implement the documented `resolvescript plugin` group for prebuilt
+      `.plugin` deployment (`install|list|uninstall`, plus `--name`, `--target`,
+      `--notes`, `--no-force`, `--dry-run`, `--root`, `--json`)
+- [x] Add `docs/plugin.md` (README link now valid)
+- [x] Update README version table (`v1.0.2` → `v1.1.0`) and template list
+      (added `ui`, `extension`; removed nonexistent `plugin` claim)
+- [x] Sync `create --help` template choices with `scaffold.py` and `docs/templates.md`
+- [x] `poetry.lock` removed (CI uses `pip`/`pyproject.toml`)
+- [x] Manifest `dependencies` documented as metadata only (README claim corrected)
+- [x] Wire `scripts_root` manifest field and `resolvescript.json` `install` block
+      (`targets`, `allow_remote`, `scripts_root`) — all honored with proper precedence
+- [x] Clean full-suite run recorded in `CHANGELOG.md` (557 passed, ruff/mypy clean)
+
+### P1 — next features
+
+- [ ] Wire the plugin contribution points beyond `commands` and `hooks` (`sources`,
+      `templates`, `provides`) or mark them explicitly as reserved in
+      the manifest docs/validation. Today only `register_commands` and
+      lifecycle hooks (`pre_build`, `post_install`) are called.
+- [ ] Auto-generate mock methods from the real `DaVinciResolveScript.py` so
+      `dev`/`test` never hit `NotImplementedError`; candidate plugin
+      (`provides: mocks:*`).
+- [ ] Static registry index (`registry.resolvescript.dev/extensions.json`) with
+      dist-tags, per-version `compat` and archive URL patterns — upgrades
+      `search`/`update` beyond the hardcoded known table.
+- [ ] `resolvescript validate <dir>` — one-shot manifest + code check for first
+      timers (candidate plugin; library validation already exists).
+- [ ] `resolvescript publish <ext>` — push a built artifact to a release or
+      registry without hand-written CI.
+- [ ] `resolvescript watch` — rebuild + reinstall on change (hot dev loop;
+      candidate plugin).
+- [ ] Make fuses/workflows consumable through the specifier pipeline
+      (`add`/`install <spec>` with kind-aware destinations and registry entries).
+
+### P2 — conveniences
+
+- [ ] Lua command mirror (`resolvescript lua-script manifest.xml`) bundling a
+      Lua installer into the extension (candidate plugin).
+- [ ] Windows context-menu integration (`Add to Resolve Scripts`).
+- [ ] TOML manifest support if demand appears (candidate plugin).
+- [ ] Richer per-kind `compat` checks beyond `update --fix` (Resolve/Python
+      version matrix, dist-tag selection).
+- [ ] Shell-completion generation (docs currently promise/describe it; verify
+      it exists or implement it).
+
+### Explicitly superseded / fixed
+
+- Removed the duplicate "auto-generate mocks" backlog entry (appeared twice).
+- The old `M5c` implementation gap is closed in v1.1.0.
+- The old "7 checks" count for `doctor` remains accurate; re-verify if checks
+  are added.
+
+---
+
+## 10. Definition of done (current)
+
+- `pip install resolvescript` works from PyPI; `resolvescript --version` reports
+  the tagged version (`1.1.0` at this sync).
+- All project, dependency, diagnostics, plugin, workflow and fuse commands
+  documented in §5 function end-to-end on Windows + macOS (primary) and Linux
+  (best effort), once the M16 doc/code mismatches are resolved.
+- Author and consumer acceptance flows (§8) are green in CI, including the
+  package → serve → `add` → `update` → `install --locked` → `remove` loop.
+- Every artifact-based install into the Resolve Scripts tree or the CLI plugin
+  dir is SHA-256-verified before the destination is touched; builds are atomic
+  and leave no partial installs. Local workspace-link installs are the explicit
+  exception.
+- Fuses validate structurally before install; `luac` validation is reported
+  honestly when available. Workflows install only to their own plugins root.
+- Docs cover every command, the specifier grammar, the manifest kinds and the
+  §0 artifact-class split — **and match the actual CLI** (M16).
+- `pytest`, `ruff` and `mypy` are clean in the release workflow; no stale
+  version strings or dead documentation links remain.
+- Framework-extension failures (version gate, import, missing hook, corrupt
+  registry) are warnings, never CLI crashes.

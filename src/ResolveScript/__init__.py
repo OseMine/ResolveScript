@@ -84,6 +84,20 @@ from .consolidate import (
 # --- errors ------------------------------------------------------------
 from .errors import ResolveScriptError
 
+# --- extensions -----------------------------------------------------------
+from .extensions import (
+    PluginEntry,
+    PluginError,
+    PluginManifest,
+    PluginRegistry,
+    discover_plugins,
+    install_plugin,
+    list_plugins,
+    load_plugin_module,
+    register_plugin_commands,
+    uninstall_plugin,
+)
+
 # --- fetch / CLI -------------------------------------------------------
 from .fetch import Fetched, FetchError, fetch, fetch_json, sha256_file
 
@@ -134,20 +148,6 @@ from .manifest import (
     validate_target,
 )
 from .package import PackageError, PackageResult, package_project
-
-# --- plugins -----------------------------------------------------------
-from .plugins import (
-    PluginEntry,
-    PluginError,
-    PluginManifest,
-    PluginRegistry,
-    discover_plugins,
-    install_plugin,
-    list_plugins,
-    load_plugin_module,
-    register_plugin_commands,
-    uninstall_plugin,
-)
 
 # --- spec / resolver ---------------------------------------------------
 from .resolver import (
@@ -227,9 +227,11 @@ from .sources import (
 from .spec import Spec, SpecError, parse_specifier
 from .workspace import (
     WORKSPACE_FILE,
+    InstallSettings,
     WorkspaceError,
     add_dependency,
     has_workspace,
+    install_settings,
     read_workspace,
     remove_dependency,
     save,
@@ -360,9 +362,11 @@ __all__ = [
     "SpecError",
     "parse_specifier",
     "WORKSPACE_FILE",
+    "InstallSettings",
     "WorkspaceError",
     "add_dependency",
     "has_workspace",
+    "install_settings",
     "read_workspace",
     "remove_dependency",
     "save",
@@ -397,7 +401,7 @@ __all__ = [
     "fetch",
     "fetch_json",
     "sha256_file",
-    # plugins
+    # extensions
     "PluginEntry",
     "PluginError",
     "PluginManifest",

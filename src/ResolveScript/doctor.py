@@ -85,11 +85,11 @@ def run_checks(
     when omitted the usual override > env > OS-default discovery applies.
     A check that raises is reported as ``fail`` - this never raises.
     """
-    from .install.discovery import resolve_scripts_root
+    from .cli import _resolve_scripts_root
     from .scaffold import TEMPLATES_DIR
 
     cwd = cwd or Path.cwd()
-    root = resolve_scripts_root(scripts_root)
+    root = _resolve_scripts_root(str(scripts_root) if scripts_root else None, cwd=cwd)
     root_source = (
         "--scripts-root"
         if scripts_root is not None

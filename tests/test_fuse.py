@@ -427,6 +427,19 @@ class TestValidation:
         with pytest.raises(FuseError, match="unbalanced"):
             build(a_fuse(process="OutImage:Set(req, "), tmp_path)
 
+    def test_a_valid_fuse_builds_without_a_lua_interpreter(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No Lua binary is a missing extra check, not a broken fuse."""
+        import importlib
+
+        validate_module = importlib.import_module("ResolveScript.fuse.validate")
+        monkeypatch.setattr(validate_module, "lua_compiler", lambda: None)
+        result = build(a_fuse(), tmp_path)
+        assert result.fuse_file is not None
+        assert result.fuse_file.is_file()
+        assert result.checked.startswith("structure only")
+
     def test_no_check_writes_it_anyway(self, tmp_path: Path) -> None:
         result = build(a_fuse(process="OutImage:Set(req, "), tmp_path, check=False)
         assert result.fuse_file is not None
@@ -857,6 +870,102 @@ class TestCLI:
         _, out = self._run(monkeypatch, capsys, "fuse", "uninstall", "MyFuse", "--root", str(fuses))
         assert "MyFuse.fuse" in out.out
         assert not (fuses / "MyFuse.fuse").exists()
+
+    def test_plugin_install_list_and_uninstall(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        binary = tmp_path / "Krokodove.plugin"
+        binary.write_bytes(b"vendor build")
+        plugins = tmp_path / "Plugins"
+
+        code, out = self._run(
+            monkeypatch,
+            capsys,
+            "plugin",
+            "install",
+            str(binary),
+            "--root",
+            str(plugins),
+            "--name",
+            "Krokodove",
+            "--notes",
+            "vendor build",
+        )
+        assert code == 0
+        assert (plugins / "Krokodove.plugin").is_file()
+
+        code, out = self._run(monkeypatch, capsys, "plugin", "list", "--root", str(plugins))
+        assert code == 0
+        assert "Krokodove" in out.out
+
+        code, out = self._run(
+            monkeypatch, capsys, "plugin", "list", "--root", str(plugins), "--json"
+        )
+        assert code == 0
+        entries = json.loads(out.out)
+        assert entries["Krokodove"]["notes"] == "vendor build"
+        assert entries["Krokodove"]["installed"] is True
+
+        code, out = self._run(
+            monkeypatch, capsys, "plugin", "uninstall", "Krokodove", "--root", str(plugins)
+        )
+        assert code == 0
+        assert not (plugins / "Krokodove.plugin").exists()
+
+    def test_plugin_install_no_force_refuses_to_overwrite(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        binary = tmp_path / "Krokodove.plugin"
+        binary.write_bytes(b"one")
+        plugins = tmp_path / "Plugins"
+        assert (
+            self._run(
+                monkeypatch, capsys, "plugin", "install", str(binary), "--root", str(plugins)
+            )[0]
+            == 0
+        )
+        binary.write_bytes(b"two")
+        code, out = self._run(
+            monkeypatch,
+            capsys,
+            "plugin",
+            "install",
+            str(binary),
+            "--root",
+            str(plugins),
+            "--no-force",
+        )
+        assert code == 1
+        assert "already exists" in out.err
+        assert (plugins / "Krokodove.plugin").read_bytes() == b"one"
+
+    def test_plugin_install_dry_run_writes_nothing(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        binary = tmp_path / "Krokodove.plugin"
+        binary.write_bytes(b"vendor")
+        plugins = tmp_path / "Plugins"
+        code, out = self._run(
+            monkeypatch,
+            capsys,
+            "plugin",
+            "install",
+            str(binary),
+            "--root",
+            str(plugins),
+            "--dry-run",
+        )
+        assert code == 0
+        assert "Krokodove.plugin" in out.out
+        assert not plugins.exists()
+
+    def test_plugin_uninstall_unknown_name_is_harmless(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        plugins = tmp_path / "Plugins"
+        code, out = self._run(
+            monkeypatch, capsys, "plugin", "uninstall", "Nope", "--root", str(plugins)
+        )
+        assert code == 0
+        assert "not installed" in out.out
 
     def test_a_missing_declaration_is_a_clear_error(self, tmp_path: Path, monkeypatch, capsys) -> None:
         monkeypatch.chdir(tmp_path)

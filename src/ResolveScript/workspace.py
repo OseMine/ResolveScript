@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import ResolveScriptError
@@ -17,6 +18,57 @@ logger = logging.getLogger(__name__)
 
 class WorkspaceError(ResolveScriptError, RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class InstallSettings:
+    """The ``install`` block of ``resolvescript.json``.
+
+    Only the keys this CLI actually honors are represented. ``targets`` is empty
+    when the file does not override the extension's own targets, and
+    ``allow_remote`` is ``None`` when the file is silent (the environment and
+    then the default policy decide).
+    """
+
+    targets: tuple[str, ...] = ()
+    allow_remote: bool | None = None
+    scripts_root: str = ""
+
+
+def install_settings(cwd: Path | None = None) -> InstallSettings:
+    """Read and validate the workspace ``install`` block."""
+    data = read_workspace(cwd)
+    raw = data.get("install") or {}
+    if not isinstance(raw, dict):
+        raise WorkspaceError(f"{workspace_path(cwd)}: 'install' must be an object")
+
+    targets_raw = raw.get("targets") or []
+    if isinstance(targets_raw, str):
+        targets_raw = [targets_raw]
+    if not isinstance(targets_raw, list) or any(
+        not isinstance(target, str) for target in targets_raw
+    ):
+        raise WorkspaceError(
+            f"{workspace_path(cwd)}: 'install.targets' must be a list of strings"
+        )
+
+    allow_remote = raw.get("allow_remote")
+    if allow_remote is not None and not isinstance(allow_remote, bool):
+        raise WorkspaceError(
+            f"{workspace_path(cwd)}: 'install.allow_remote' must be a boolean"
+        )
+
+    scripts_root = raw.get("scripts_root") or ""
+    if not isinstance(scripts_root, str):
+        raise WorkspaceError(
+            f"{workspace_path(cwd)}: 'install.scripts_root' must be a string"
+        )
+
+    return InstallSettings(
+        targets=tuple(targets_raw),
+        allow_remote=allow_remote,
+        scripts_root=scripts_root,
+    )
 
 
 def workspace_path(cwd: Path | None = None) -> Path:

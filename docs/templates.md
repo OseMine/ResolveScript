@@ -6,7 +6,7 @@ ResolveScript scaffolds projects from templates. Each template provides a comple
 
 ```bash
 resolvescript create --help
-# --template {minimal,pydavinci,davinci-rest,lua,workflow,fuse}
+# --template {minimal,pydavinci,davinci-rest,lua,workflow,fuse,ui,extension}
 ```
 
 | Template | Use Case | Language | Manifest |
@@ -17,6 +17,8 @@ resolvescript create --help
 | `lua` | Native Lua script | Lua | JSON |
 | `workflow` | Workspace > Workflow Integrations | Python + Electron | JSON |
 | `fuse` | Fusion `.fuse` plugin | Python (generates Lua) | JSON |
+| `ui` | Declarative UI framework | Python | JSON |
+| `extension` | ResolveScript CLI plugin | Python | JSON |
 
 ## Template Comparison
 
@@ -81,6 +83,26 @@ fuse/
 ├── tests/test_smoke.py  # Validates .fuse output
 ├── README.md            # Full fuse docs
 └── installer.lua.j2     # Not used (fuses don't consolidate)
+
+ui/
+├── manifest.json        # kind: "script"
+├── my_ui/
+│   ├── __init__.py
+│   ├── ui.py            # Window/Column/Row/... composition
+│   └── app.py           # run(Window(...))
+├── conftest.py
+├── tests/test_smoke.py  # Headless MockBackend tests
+└── README.md            # Full UI docs
+
+extension/
+├── manifest.json        # kind: "extension"
+├── my_extension/
+│   ├── __init__.py
+│   └── plugin.py        # register_commands(parser)
+├── plugin.json          # Standalone plugin manifest (optional)
+├── pyproject.toml
+├── tests/test_smoke.py
+└── README.md            # Plugin authoring guide
 ```
 
 ## Manifest Variants
@@ -88,7 +110,7 @@ fuse/
 | Template | Manifest | Notes |
 |----------|----------|-------|
 | `minimal`, `pydavinci`, `davinci-rest` | `.json` or `.xml` | `--fmt json\|xml` |
-| `lua`, `workflow`, `fuse` | `.json` only | XML not supported for these kinds |
+| `lua`, `workflow`, `fuse`, `ui`, `extension` | `.json` only | XML not supported for these kinds |
 
 ## Customizing a Scaffolded Project
 

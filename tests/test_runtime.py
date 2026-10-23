@@ -365,6 +365,82 @@ def test_cli_install_author_flow_and_workspace_materialize(tmp_path, monkeypatch
     assert get_extension(read_registry(scripts), "widget")
 
 
+def test_cli_install_uses_workspace_install_settings(tmp_path, monkeypatch, capsys) -> None:
+    """``resolvescript.json`` can choose the root and override targets."""
+    from ResolveScript.cli import main
+    from ResolveScript.install.registry import get_extension, read_registry
+
+    scripts = tmp_path / "workspace-scripts"
+    pkg = _write_package(tmp_path / "src", "widget", "1.0.0")
+    (tmp_path / "resolvescript.json").write_text(
+        json.dumps(
+            {
+                "dependencies": {"widget": f"file:{pkg}"},
+                "install": {
+                    "scripts_root": str(scripts),
+                    "targets": ["Utility"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["install"]) == 0
+    entry = get_extension(read_registry(scripts), "widget")
+    assert entry["targets"] == ["Utility"]
+    assert (scripts / "Utility" / "widget" / "widget.py").is_file()
+    assert not (scripts / "Comp").exists()
+
+
+def test_cli_install_author_flow_honors_manifest_scripts_root(tmp_path, monkeypatch, capsys) -> None:
+    """An author manifest may pin the root for ``resolvescript install``."""
+    from ResolveScript.cli import main
+    from ResolveScript.install.registry import get_extension, read_registry
+    from ResolveScript.scaffold import scaffold_project
+
+    scripts = tmp_path / "manifest-scripts"
+    scaffold_project("demo", destination=tmp_path)
+    project = tmp_path / "demo"
+    manifest_path = project / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scripts_root"] = str(scripts)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.chdir(project)
+    assert main(["install"]) == 0
+    assert get_extension(read_registry(scripts), "demo")
+    assert (scripts / "Comp" / "demo").is_dir()
+
+
+def test_cli_install_workspace_disallows_remote_sources(tmp_path, monkeypatch, capsys) -> None:
+    """``install.allow_remote: false`` refuses before any network access."""
+    from ResolveScript.cli import main
+
+    (tmp_path / "resolvescript.json").write_text(
+        json.dumps({"dependencies": {}, "install": {"allow_remote": False}}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["install", "github:example/remote"]) == 1
+    err = capsys.readouterr().err
+    assert "remote sources are disabled" in err
+
+
+def test_cli_install_rejects_invalid_workspace_install_block(tmp_path, monkeypatch, capsys) -> None:
+    from ResolveScript.cli import main
+
+    (tmp_path / "resolvescript.json").write_text(
+        json.dumps({"dependencies": {}, "install": {"targets": 42}}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["install"]) == 1
+    assert "install.targets" in capsys.readouterr().err
+
+
 def test_cli_update_precise(tmp_path, monkeypatch, capsys) -> None:
     from ResolveScript.cli import main
     from ResolveScript.install.registry import get_extension, read_registry

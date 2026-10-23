@@ -11,6 +11,7 @@ import argparse
 import importlib
 import json
 import logging
+import os
 import sys
 from functools import partial
 from pathlib import Path
@@ -124,6 +125,8 @@ def _cmd_create(args: argparse.Namespace) -> int:
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
+    from .extensions import dispatch_plugin_hooks
+
     root = Path.cwd()
     manifest_path = root / "manifest.json"
     if not manifest_path.is_file():
@@ -144,6 +147,9 @@ def _cmd_build(args: argparse.Namespace) -> int:
     except ManifestError as exc:
         print(f"resolvescript: {exc}", file=sys.stderr)
         return 1
+
+    # Dispatch pre_build hook before building
+    dispatch_plugin_hooks("pre_build", manifest, root)
 
     if not manifest.consolidate.enabled:
         print("resolvescript: consolidate is disabled in the manifest; nothing to build")
@@ -222,10 +228,38 @@ def _cmd_consolidate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _resolve_scripts_root(override: str | None) -> Path:
-    from .install.discovery import resolve_scripts_root
+def _resolve_scripts_root(
+    override: str | None,
+    *,
+    cwd: Path | None = None,
+    manifest: Any = None,
+) -> Path:
+    """Resolve the Scripts root with the documented precedence.
 
-    return resolve_scripts_root(override)
+    explicit ``--scripts-root`` → ``RESOLVESCRIPT_SCRIPTS_ROOT`` →
+    ``resolvescript.json`` ``install.scripts_root`` → manifest
+    ``scripts_root`` → per-OS default.
+    """
+    from .config import ENV_SCRIPTS_ROOT, resolve_env
+    from .install.discovery import default_scripts_root
+    from .workspace import install_settings
+
+    if override:
+        return Path(override).expanduser()
+    env_value = resolve_env(ENV_SCRIPTS_ROOT)
+    if env_value:
+        return Path(env_value).expanduser()
+
+    cwd = Path(cwd) if cwd is not None else Path.cwd()
+    if (cwd / "resolvescript.json").is_file():
+        workspace_root = install_settings(cwd).scripts_root
+        if workspace_root:
+            return Path(workspace_root).expanduser()
+
+    manifest_root = getattr(manifest, "scripts_root", "") if manifest is not None else ""
+    if manifest_root:
+        return Path(manifest_root).expanduser()
+    return default_scripts_root()
 
 
 def _cache_dir(cwd: Path) -> Path:
@@ -287,10 +321,40 @@ def _cmd_clean(args: argparse.Namespace) -> int:
     return 0
 
 
+def _remote_allowed(cwd: Path) -> bool:
+    """Whether the workspace (or environment) allows remote sources."""
+    from .config import ENV_ALLOW_REMOTE, allow_remote, resolve_env
+    from .workspace import install_settings
+
+    # An explicit environment switch is the operator's override.
+    if resolve_env(ENV_ALLOW_REMOTE) is not None:
+        return allow_remote()
+    return install_settings(cwd).allow_remote is not False
+
+
+def _remote_spec(spec_text: str, cwd: Path):
+    """Return the parsed spec when it names a remote source, else ``None``."""
+    from .sources import known
+    from .spec import parse_specifier
+
+    spec = parse_specifier(spec_text, cwd=cwd)
+    if spec.kind == "name":
+        entry = known.lookup(spec.source)
+        if not entry:
+            return None
+        spec = parse_specifier(entry["source"], cwd=cwd)
+    return spec if spec.kind in {"github", "archive", "manifest"} else None
+
+
 def _materialize(spec_text: str, *, cwd: Path | None = None):
-    from .resolver import resolve_spec
+    from .resolver import ResolveError, resolve_spec
 
     cwd = cwd or Path.cwd()
+    if _remote_spec(spec_text, cwd) is not None and not _remote_allowed(cwd):
+        raise ResolveError(
+            "remote sources are disabled by resolvescript.json "
+            "'install.allow_remote' (set RESOLVESCRIPT_ALLOW_REMOTE=1 to override)"
+        )
     return resolve_spec(spec_text, cwd=cwd, work_dir=_cache_dir(cwd))
 
 
@@ -317,16 +381,14 @@ def _pin_spec(spec_text: str, precise: str, cwd: Path) -> str:
 
 
 def _cmd_install(args: argparse.Namespace) -> int:
-    from .install.discovery import resolve_scripts_root
     from .install.installer import InstallError, InstallOptions, install_package, install_project
     from .install.registry import get_extension, read_registry
     from .resolver import ResolveError, lockfile_satisfies
-    from .workspace import read_workspace
+    from .workspace import WorkspaceError, install_settings, read_workspace
 
     cwd = Path.cwd()
-    scripts_root = resolve_scripts_root(args.scripts_root)
 
-    def _report(result) -> int:
+    def _report(result, scripts_root: Path) -> int:
         for line in result.describe():
             print(line)
         if result.dry_run:
@@ -336,26 +398,45 @@ def _cmd_install(args: argparse.Namespace) -> int:
         return 0
 
     try:
+        from .extensions import dispatch_plugin_hooks
+
+        settings = install_settings(cwd)
+
         if args.spec:
+            scripts_root = _resolve_scripts_root(args.scripts_root, cwd=cwd)
             resolved = _materialize(args.spec, cwd=cwd)
             result = install_package(
                 resolved.package_dir,
                 resolved.manifest,
                 InstallOptions(
                     scripts_root=scripts_root,
+                    targets=settings.targets,
                     source=resolved.source,
                     resolved=resolved.source,
                     integrity=resolved.integrity,
                 ),
             )
-            return _report(result)
+            if not args.dry_run:
+                dispatch_plugin_hooks("post_install", result, scripts_root)
+            return _report(result, scripts_root)
 
         has_manifest = (cwd / "manifest.json").is_file() or (cwd / "manifest.xml").is_file()
         if has_manifest:
-            result = install_project(cwd, InstallOptions(scripts_root=scripts_root, dry_run=args.dry_run))
-            return _report(result)
+            manifest, _path = _load_manifest_from(cwd)
+            scripts_root = _resolve_scripts_root(
+                args.scripts_root, cwd=cwd, manifest=manifest
+            )
+            result = install_project(
+                cwd,
+                InstallOptions(scripts_root=scripts_root, dry_run=args.dry_run),
+                manifest=manifest,
+            )
+            if not args.dry_run:
+                dispatch_plugin_hooks("post_install", result, scripts_root)
+            return _report(result, scripts_root)
 
         if (cwd / "resolvescript.json").is_file():
+            scripts_root = _resolve_scripts_root(args.scripts_root, cwd=cwd)
             deps = read_workspace(cwd).get("dependencies", {})
             if not deps:
                 print("resolvescript: no recorded dependencies in resolvescript.json")
@@ -385,11 +466,14 @@ def _cmd_install(args: argparse.Namespace) -> int:
                         resolved.manifest,
                         InstallOptions(
                             scripts_root=scripts_root,
+                            targets=settings.targets,
                             source=resolved.source,
                             resolved=resolved.source,
                             integrity=resolved.integrity,
                         ),
                     )
+                    if not args.dry_run:
+                        dispatch_plugin_hooks("post_install", result, scripts_root)
                 except (ResolveError, InstallError) as exc:
                     print(f"resolvescript: install {name}: {exc}", file=sys.stderr)
                     errors += 1
@@ -404,17 +488,21 @@ def _cmd_install(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    except (ManifestError, ResolveError, InstallError) as exc:
+    except (ManifestError, ResolveError, InstallError, WorkspaceError) as exc:
         print(f"resolvescript: install: {exc}", file=sys.stderr)
         return 1
 
 
 def _cmd_remove(args: argparse.Namespace) -> int:
     from .install.installer import InstallError, InstallOptions, uninstall_package
-    from .workspace import has_workspace, read_workspace, remove_dependency, save
+    from .workspace import WorkspaceError, has_workspace, read_workspace, remove_dependency, save
 
-    scripts_root = _resolve_scripts_root(args.scripts_root)
     cwd = Path.cwd()
+    try:
+        scripts_root = _resolve_scripts_root(args.scripts_root, cwd=cwd)
+    except WorkspaceError as exc:
+        print(f"resolvescript: remove: {exc}", file=sys.stderr)
+        return 1
     had_workspace_entry = (
         has_workspace(cwd)
         and args.name in read_workspace(cwd).get("dependencies", {})
@@ -437,23 +525,26 @@ def _cmd_remove(args: argparse.Namespace) -> int:
 def _cmd_add(args: argparse.Namespace) -> int:
     from .install.installer import InstallError, InstallOptions, install_package
     from .resolver import ResolveError
-    from .workspace import add_dependency, save
+    from .workspace import WorkspaceError, add_dependency, install_settings, save
 
     cwd = Path.cwd()
-    scripts_root = _resolve_scripts_root(args.scripts_root)
     try:
+        settings = install_settings(cwd)
+        scripts_root = _resolve_scripts_root(args.scripts_root, cwd=cwd)
         resolved = _materialize(args.spec, cwd=cwd)
+        targets = (args.target,) if args.target else settings.targets
         result = install_package(
             resolved.package_dir,
             resolved.manifest,
             InstallOptions(
                 scripts_root=scripts_root,
+                targets=targets,
                 source=resolved.source,
                 resolved=resolved.source,
                 integrity=resolved.integrity,
             ),
         )
-    except (ResolveError, InstallError) as exc:
+    except (ResolveError, InstallError, WorkspaceError) as exc:
         print(f"resolvescript: add: {exc}", file=sys.stderr)
         return 1
     for line in result.describe():
@@ -467,7 +558,14 @@ def _cmd_add(args: argparse.Namespace) -> int:
 def _cmd_update(args: argparse.Namespace) -> int:
     from .install.installer import InstallError, InstallOptions, install_package
     from .resolver import ResolveError
-    from .workspace import add_dependency, has_workspace, read_workspace, save
+    from .workspace import (
+        WorkspaceError,
+        add_dependency,
+        has_workspace,
+        install_settings,
+        read_workspace,
+        save,
+    )
 
     cwd = Path.cwd()
     if not has_workspace(cwd):
@@ -477,10 +575,15 @@ def _cmd_update(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    scripts_root = _resolve_scripts_root(args.scripts_root)
+    try:
+        settings = install_settings(cwd)
+        scripts_root = _resolve_scripts_root(args.scripts_root, cwd=cwd)
+    except WorkspaceError as exc:
+        print(f"resolvescript: update: {exc}", file=sys.stderr)
+        return 1
     deps = read_workspace(cwd).get("dependencies", {})
     names = [args.name] if args.name else sorted(deps)
-    compat_env = __import__("os").environ.get("RESOLVESCRIPT_COMPAT", "18")
+    compat_env = os.environ.get("RESOLVESCRIPT_COMPAT", "18")
     errors = 0
     for name in names:
         spec = deps.get(name)
@@ -522,6 +625,7 @@ def _cmd_update(args: argparse.Namespace) -> int:
                 resolved.manifest,
                 InstallOptions(
                     scripts_root=scripts_root,
+                    targets=settings.targets,
                     source=resolved.source,
                     resolved=resolved.source,
                     integrity=resolved.integrity,
@@ -553,7 +657,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
 
 
 def _cmd_ext_add(args: argparse.Namespace) -> int:
-    from .plugins import PluginError, install_plugin
+    from .extensions import PluginError, install_plugin
     from .resolver import ResolveError
     from .spec import parse_specifier
 
@@ -582,11 +686,14 @@ def _cmd_ext_add(args: argparse.Namespace) -> int:
     print(f"installed {entry.name} {entry.version} -> {entry.path}")
     if entry.manifest.commands:
         print(f"commands: {', '.join(entry.manifest.commands)}")
+    # Dispatch post_install hook for framework extension installs
+    from .extensions import dispatch_plugin_hooks
+    dispatch_plugin_hooks("post_install", entry, entry.path)
     return 0
 
 
 def _cmd_ext_remove(args: argparse.Namespace) -> int:
-    from .plugins import PluginError, uninstall_plugin
+    from .extensions import PluginError, uninstall_plugin
 
     try:
         removed = uninstall_plugin(args.name)
@@ -604,7 +711,7 @@ def _cmd_ext_remove(args: argparse.Namespace) -> int:
 
 
 def _cmd_ext_list(args: argparse.Namespace) -> int:
-    from .plugins import PluginError, list_plugins
+    from .extensions import PluginError, list_plugins
 
     try:
         plugins = list_plugins()
@@ -646,8 +753,15 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 def _cmd_manage_list(args: argparse.Namespace) -> int:
     from .install.registry import read_registry
+    from .workspace import WorkspaceError
 
-    scripts_root = _resolve_scripts_root(getattr(args, "scripts_root", None))
+    try:
+        scripts_root = _resolve_scripts_root(
+            getattr(args, "scripts_root", None), cwd=Path.cwd()
+        )
+    except WorkspaceError as exc:
+        print(f"resolvescript: manage list: {exc}", file=sys.stderr)
+        return 1
     extensions = read_registry(scripts_root).get("extensions", {})
     if getattr(args, "json", False):
         print(json.dumps(extensions, indent=2))
@@ -669,8 +783,13 @@ def _cmd_manage_remove(args: argparse.Namespace) -> int:
     from .install.discovery import target_dir
     from .install.installer import InstallError, validate_registry_name, validate_registry_relpath
     from .install.registry import get_extension, read_registry, remove_entry
+    from .workspace import WorkspaceError
 
-    scripts_root = _resolve_scripts_root(args.scripts_root)
+    try:
+        scripts_root = _resolve_scripts_root(args.scripts_root, cwd=Path.cwd())
+    except WorkspaceError as exc:
+        print(f"resolvescript: manage remove: {exc}", file=sys.stderr)
+        return 1
     registry = read_registry(scripts_root)
     entry = get_extension(registry, args.name)
     if entry is None:
@@ -993,6 +1112,46 @@ def _fuse_binary(args: argparse.Namespace, path: str) -> BinaryPlugin:
     )
 
 
+def _cmd_plugin(args: argparse.Namespace, action: str) -> int:
+    """Dispatch a ``resolvescript plugin <action>`` subcommand."""
+    from .fuse import install_binary, list_installed
+
+    try:
+        root = _fuse_target(args, PLUGINS_DIR_NAME)
+    except FusionPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "list":
+        if getattr(args, "json", False):
+            print(json.dumps(list_installed(root, kind="plugin"), indent=2))
+        else:
+            print("\n".join(describe_fuses_installed(root, kind="plugin")))
+        return 0
+
+    if action == "uninstall":
+        if not root.is_dir():
+            print(f"'{args.name}' is not installed (no {root})")
+            return 0
+        removed = uninstall_fuse(args.name, root, kind="plugin")
+        print("\n".join(removed) or f"'{args.name}' was not installed")
+        return 0
+
+    try:
+        plugin = _fuse_binary(args, args.path)
+        result = install_binary(
+            plugin,
+            root,
+            dry_run=args.dry_run,
+            overwrite=not args.no_force,
+        )
+    except FuseError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(result.describe()))
+    return 0
+
+
 def _cmd_fuse(args: argparse.Namespace, action: str) -> int:
     """Dispatch a ``resolvescript fuse <action>`` subcommand."""
     if action == "root":
@@ -1220,7 +1379,7 @@ def _register_plugin_commands(sub: Any) -> None:
     imported, or is missing its ``register_commands`` hook is skipped with a
     warning — loading plugins must never crash the CLI.
     """
-    from .plugins import PluginError, discover_plugins, register_plugin_commands
+    from .extensions import PluginError, discover_plugins, register_plugin_commands
 
     try:
         entries = discover_plugins()
@@ -1267,7 +1426,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", dest="fmt", action="store_const", const="json", default="json", help="generate manifest.json (default)")
     p.add_argument("--xml", dest="fmt", action="store_const", const="xml", help="generate manifest.xml")
     p.add_argument("--dir", help="parent directory to create the project in")
-    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, pydavinci, davinci-rest, lua, workflow, fuse, ui)")
+    p.add_argument("--template", default="minimal", help="scaffold flavor (minimal, pydavinci, davinci-rest, lua, workflow, fuse, extension, ui)")
     p.set_defaults(func=_cmd_create)
 
     p = sub.add_parser("dev", help="sandboxed dev loop / REPL against the mock Resolve API")
@@ -1467,6 +1626,32 @@ def build_parser() -> argparse.ArgumentParser:
     sp = fu.add_parser("describe", help="print the fuse's metadata")
     _fuse_add_source(sp)
     sp.set_defaults(func=partial(_cmd_fuse, action="describe"))
+
+    p = sub.add_parser(
+        "plugin",
+        help="deploy prebuilt Fusion plugins (.plugin, .bundle, .dylib, ...)",
+    )
+    pl = p.add_subparsers(dest="plugin_command", metavar="<plugin>", required=True)
+
+    sp = pl.add_parser("install", help="copy a compiled plugin into the Plugins directory")
+    sp.add_argument("path", help="the .plugin / .bundle / .dll / .so / .dylib to deploy")
+    sp.add_argument("--name", help="name recorded in the registry (default: file stem)")
+    sp.add_argument("--target", help="installed file name (default: source name)")
+    sp.add_argument("--notes", help="free text recorded with the install")
+    sp.add_argument("--no-force", action="store_true", help="fail if the target already exists")
+    sp.add_argument("--dry-run", action="store_true", help="report without writing")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.set_defaults(func=partial(_cmd_plugin, action="install"))
+
+    sp = pl.add_parser("list", help="list compiled plugins installed by ResolveScript")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.add_argument("--json", action="store_true", help="machine-readable output")
+    sp.set_defaults(func=partial(_cmd_plugin, action="list"))
+
+    sp = pl.add_parser("uninstall", help="remove an installed compiled plugin")
+    sp.add_argument("name", help="the name or target file recorded by 'plugin install'")
+    _fuse_add_root(sp, PLUGINS_DIR_NAME)
+    sp.set_defaults(func=partial(_cmd_plugin, action="uninstall"))
 
     p = sub.add_parser("manage", help="low-level install registry operations")
     manage = p.add_subparsers(dest="manage_command", metavar="<manage>", required=True)

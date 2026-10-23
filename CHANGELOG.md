@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### v1.1.0 Maintenance (2026-10-23)
+
+- **`resolvescript plugin install|list|uninstall`** — full CLI group for
+  deploying prebuilt Fusion `.plugin` binaries with `--name`, `--target`,
+  `--notes`, `--no-force`, `--dry-run`, `--root`, `--json` options.
+- **Workspace `install` block fully wired** — `resolvescript.json` now
+  honors `scripts_root`, `targets`, and `allow_remote`; `install` command
+  respects workspace settings (with CLI/env precedence).
+- **Manifest `scripts_root` honored** — author installs (`resolvescript install`
+  with manifest present) use the manifest's `scripts_root` field.
+- **Remote-source policy** — `install.allow_remote: false` blocks `github:`,
+  `archive`, and `manifest` specifiers before any network access; overridable
+  by `RESOLVESCRIPT_ALLOW_REMOTE=1`.
+- **No-Lua fuse validation fixed** — `problems()` no longer treats missing
+  `luac` as a fuse error; `checked_with()` honestly reports "structure only".
+- **Plugin hooks implemented** — `pre_build(manifest, root)` and
+  `post_install(result, scripts_root)` lifecycle hooks dispatched to all
+  loaded framework extensions; errors are warnings, never CLI crashes.
+- **`create --help` template list updated** — now includes `ui` and `extension`.
+- **Documentation sync** — added `docs/plugin.md`; updated README version to
+  `v1.1.0`; corrected `dependencies` field description (metadata only);
+  updated `docs/templates.md` with `ui`/`extension` templates and JSON-only note.
+- **`poetry.lock` removed** — CI uses `pip`/`pyproject.toml`; lockfile was
+  unreferenced and misleading.
+- **Full test suite: 557 passed, 3 skipped** — `ruff` and `mypy` clean.
+
 ## 1.1.0 - 2026-10-08
 
 ### Added
