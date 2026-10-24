@@ -8,6 +8,7 @@ their owning milestone; anything still on the M0 skeleton prints a notice.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import json
 import logging
@@ -197,6 +198,64 @@ def _cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_lua_script(args: argparse.Namespace) -> int:
+    """Generate a Lua installer file (standalone command for --installable)."""
+    from .consolidate import ConsolidateError
+    from .installer_lua import InstallerTemplateError, build_installable_lua
+
+    root = Path(args.dir).expanduser() if args.dir else Path.cwd()
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        manifest_path = root / "manifest.xml"
+        if not manifest_path.is_file():
+            print(
+                "resolvescript: no manifest.json or manifest.xml in the current directory "
+                "(run 'resolvescript create' or use 'resolvescript consolidate <dir>')",
+                file=sys.stderr,
+            )
+            return 1
+    try:
+        if manifest_path.suffix == ".xml":
+            from .manifest.xml_reader import load_manifest
+        else:
+            from .manifest.json_reader import load_manifest
+        manifest = load_manifest(manifest_path)
+    except ManifestError as exc:
+        print(f"resolvescript: lua-script: {exc}", file=sys.stderr)
+        return 1
+
+    if not manifest.consolidate.enabled:
+        print("resolvescript: consolidate is disabled in the manifest; nothing to build")
+        return 0
+
+    output = Path(args.output).expanduser() if args.output else None
+    installer_template = Path(args.installer_template).expanduser() if args.installer_template else None
+    if installer_template is None:
+        candidate = root / "installer.lua.j2"
+        if candidate.is_file():
+            installer_template = candidate
+    if output is None:
+        output = root / "dist" / f"{manifest.name.replace(' ', '_').replace('-', '_')}_installer.lua"
+    elif output.suffix != ".lua":
+        output = output.with_suffix(".lua")
+
+    try:
+        build_installable_lua(
+            manifest,
+            root,
+            output,
+            installer_template=installer_template,
+            target_category=args.target_category,
+            overwrite=not args.no_force,
+        )
+    except (ConsolidateError, InstallerTemplateError) as exc:
+        print(f"resolvescript: lua-script: {exc}", file=sys.stderr)
+        return 1
+    print(f"Created Lua installer: {output}")
+    print("Drag this file into Fusion's Console or Workspace to install the script.")
+    return 0
+
+
 def _cmd_package(args: argparse.Namespace) -> int:
     from .package import PackageError, package_project
 
@@ -211,6 +270,45 @@ def _cmd_package(args: argparse.Namespace) -> int:
     print(f"SHA-256: {result.sha256}")
     if result.checksum_file:
         print(f"Wrote {result.checksum_file.name}")
+    return 0
+
+
+def _cmd_publish(args: argparse.Namespace) -> int:
+    from .package import PackageError, package_project
+
+    root = Path.cwd()
+    dist_dir = Path(args.dist) if args.dist else None
+    try:
+        result = package_project(root, dist_dir)
+    except (ManifestError, PackageError) as exc:
+        print(f"resolvescript: publish: {exc}", file=sys.stderr)
+        return 1
+
+    if args.github_release:
+        # Create a GitHub release via gh CLI
+        import subprocess
+        assert result.manifest is not None
+        tag = f"v{result.manifest.version}"
+        gh_cmd = [
+            "gh", "release", "create", tag,
+            str(result.archive),
+            "--title", f"{result.manifest.name} {result.manifest.version}",
+            "--notes", f"Release {result.manifest.name} {result.manifest.version}",
+        ]
+        if args.draft:
+            gh_cmd.append("--draft")
+        if args.prerelease:
+            gh_cmd.append("--prerelease")
+        try:
+            subprocess.run(gh_cmd, check=True)
+            print(f"Published GitHub release: {tag}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            print(f"resolvescript: publish: gh CLI failed: {exc}", file=sys.stderr)
+            return 1
+    else:
+        print("Package created. Use --github-release to publish to GitHub Releases.")
+        print(f"  Archive: {result.archive}")
+        print(f"  SHA-256: {result.sha256}")
     return 0
 
 
@@ -751,6 +849,23 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def _cmd_context_menu(args: argparse.Namespace) -> int:
+    """Windows context menu integration for 'Add to Resolve Scripts'."""
+    if sys.platform != "win32":
+        print("Context menu integration only available on Windows", file=sys.stderr)
+        return 1
+
+    try:
+        from .scripts.win_context_menu import register_context_menu, unregister_context_menu
+    except ImportError as exc:
+        print(f"resolvescript: context-menu: {exc}", file=sys.stderr)
+        return 1
+
+    if args.unregister:
+        return 0 if unregister_context_menu() else 1
+    return 0 if register_context_menu() else 1
+
+
 def _cmd_manage_list(args: argparse.Namespace) -> int:
     from .install.registry import read_registry
     from .workspace import WorkspaceError
@@ -888,6 +1003,203 @@ def _cmd_test(args: argparse.Namespace) -> int:
         analysis = analyze_project(cwd, manifest)
         for line in analysis.api_report():
             print(line)
+    result = subprocess.run(cmd, cwd=cwd, env=env)
+    if result.returncode != 0:
+        return 1
+    if args.api_coverage:
+        analysis = analyze_project(cwd, manifest)
+        for line in analysis.api_report():
+            print(line)
+    return 0
+
+
+def _cmd_completion(args: argparse.Namespace) -> int:
+    """Generate shell completion script."""
+
+    shell = args.shell
+    build_parser()
+
+    if shell == "bash":
+        # Bash completion using argcomplete-like approach
+        print("# resolvescript bash completion")
+        print("eval \"$(register-python-argcomplete resolvescript)\" 2>/dev/null || true")
+        # Fallback: static completion
+        print("""
+_resolvescript_complete() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="create dev watch test analyze validate build lua-script package publish add install update upgrade remove search doctor clean consolidate workflow fuse plugin manage extensions --help --version -v"
+    if [[ ${cur} == -* ]]; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+    case "${prev}" in
+        create)
+            COMPREPLY=( $(compgen -W "--json --xml --dir --template" -- ${cur}) )
+            ;;
+        dev|watch)
+            COMPREPLY=( $(compgen -W "--built --repl --editor" -- ${cur}) )
+            ;;
+        build)
+            COMPREPLY=( $(compgen -W "--output --installable --installer-template" -- ${cur}) )
+            ;;
+        lua-script)
+            COMPREPLY=( $(compgen -W "--dir --output --installer-template --target-category --no-force" -- ${cur}) )
+            ;;
+        install|add)
+            COMPREPLY=( $(compgen -W "--scripts-root --target --no-save" -- ${cur}) )
+            ;;
+        update|remove)
+            COMPREPLY=( $(compgen -W "--scripts-root --locked --dry-run" -- ${cur}) )
+            ;;
+        *)
+            ;;
+    esac
+}
+complete -F _resolvescript_complete resolvescript
+""")
+    elif shell == "zsh":
+        print("# resolvescript zsh completion")
+        print("""
+#compdef resolvescript
+
+_resolvescript() {
+    local context state state_descr line
+    declare -A opt_args
+    local -a commands
+    commands=(
+        'create:scaffold a new Resolve script project'
+        'dev:sandboxed dev loop / REPL against the mock Resolve API'
+        'watch:watch for changes and rebuild/install (hot dev loop)'
+        'test:run the extension\\'s pytest suite against the mock API'
+        'analyze:static checks on the extension (imports, manifest, API usage)'
+        'validate:one-shot manifest + code check (alias for analyze)'
+        'build:consolidate the multi-file package into a single file'
+        'lua-script:generate a Lua installer file (drag into Fusion Console)'
+        'package:assemble release artifacts into dist/'
+        'publish:package and publish to GitHub Releases (requires gh CLI)'
+        'add:install a Resolve script and record it in resolvescript.json'
+        'install:materialize recorded deps, or install a single spec one-off'
+        'update:re-resolve recorded deps within their ranges'
+        'upgrade:alias for update'
+        'remove:uninstall a Resolve script and unrecord it'
+        'search:discover Resolve scripts (known table + conventions)'
+        'doctor:diagnose the environment, project and install registry'
+        'clean:clean project caches, build artifacts, and registry files'
+        'consolidate:merge a package directory into a single .py (no manifest needed)'
+        'workflow:build and install Workflow Integrations'
+        'fuse:build, install and package Fusion fuses (.fuse plugins)'
+        'plugin:deploy prebuilt Fusion plugins (.plugin, .bundle, .dylib, ...)'
+        'manage:low-level install registry operations'
+        'extensions:manage ResolveScript framework extensions (plugins)'
+    )
+    _arguments -C """ \
+        + r"(-h --help)" r"{\-h,--help}" r"[show help message]" """ \
+        + r"(-v --verbose)" r"{\\-v,--verbose}" r"[log diagnostics]" """ \
+        + r"(--version)" r"--version" r"[show program version]" """ \
+        + '*:command:->subcmds' && return 0
+    if (( CURRENT == 1 )); then
+        compadd -a commands
+        return
+    fi
+    case "$words[1]" in
+        create)
+            _arguments \
+                '--json[generate manifest.json]' \
+                '--xml[generate manifest.xml]' \
+                '--dir[parent directory]' \
+                '--template[scaffold flavor]: :(minimal pydavinci davinci-rest lua workflow fuse ui extension)'
+            ;;
+        dev)
+            _arguments '--built[run against consolidated file]' '--repl[interactive REPL]' '--editor[print in-app script]'
+            ;;
+        watch)
+            _arguments '--dir[project directory]' '--interval[poll interval]' '--install[auto-install after rebuild]'
+            ;;
+        test)
+            _arguments '--built[test consolidated file]' '-k[only run tests matching pattern]' '--api-coverage[report used-vs-mocked API]'
+            ;;
+        build)
+            _arguments '--output[output path]' '--installable[generate Lua installer]' '--installer-template[custom installer template]'
+            ;;
+        lua-script)
+            _arguments '--dir[project directory]' '--output[output file]' '--installer-template[custom template]' '--target-category[target category]' '--no-force[fail if exists]'
+            ;;
+        install)
+            _arguments '--scripts-root[override Scripts root]' '--locked[fail if artifacts no longer satisfy]' '--dry-run[show what would change]'
+            ;;
+        add)
+            _arguments '--scripts-root[override Scripts root]' '--target[override install target]' '--no-save[install without recording]'
+            ;;
+        *)
+            _message 'unknown command'
+            ;;
+    esac
+    }}
+compdef _resolvescript resolvescript
+""")
+    elif shell == "fish":
+        print("# resolvescript fish completion")
+        print("""
+function __fish_resolvescript_commands
+    set -l commands create dev watch test analyze validate build lua-script package publish add install update upgrade remove search doctor clean consolidate workflow fuse plugin manage extensions
+    echo $commands
+end
+
+function __fish_resolvescript_using_command
+    set -l cmd (commandline -opc)
+    if [ (count $cmd) -eq 1 ]
+        return 0
+    end
+    return 1
+end
+
+complete -c resolvescript -n "__fish_resolvescript_using_command" -f -a "(__fish_resolvescript_commands)"
+
+complete -c resolvescript -n "not __fish_resolvescript_using_command" -l help -s h -d "Show help"
+complete -c resolvescript -n "not __fish_resolvescript_using_command" -l version -d "Show version"
+complete -c resolvescript -n "not __fish_resolvescript_using_command" -s v -l verbose -d "Log diagnostics"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from create" -s j -l json -d "Generate manifest.json"
+complete -c resolvescript -n "__fish_seen_subcommand_from create" -s x -l xml -d "Generate manifest.xml"
+complete -c resolvescript -n "__fish_seen_subcommand_from create" -l dir -d "Parent directory" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from create" -l template -d "Scaffold flavor" -a "minimal pydavinci davinci-rest lua workflow fuse ui extension"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from dev" -l built -d "Run against consolidated file"
+complete -c resolvescript -n "__fish_seen_subcommand_from dev" -l repl -d "Interactive REPL"
+complete -c resolvescript -n "__fish_seen_subcommand_from dev" -l editor -d "Print in-app script"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from watch" -l dir -d "Project directory" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from watch" -l interval -d "Poll interval in seconds"
+complete -c resolvescript -n "__fish_seen_subcommand_from watch" -l install -d "Auto-install after rebuild"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from test" -l built -d "Test consolidated file"
+complete -c resolvescript -n "__fish_seen_subcommand_from test" -s k -d "Only run tests matching pattern"
+complete -c resolvescript -n "__fish_seen_subcommand_from test" -l api-coverage -d "Report used-vs-mocked API"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from build" -l output -d "Output path" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from build" -l installable -d "Generate Lua installer"
+complete -c resolvescript -n "__fish_seen_subcommand_from build" -l installer-template -d "Custom installer template" -r
+
+complete -c resolvescript -n "__fish_seen_subcommand_from lua-script" -l dir -d "Project directory" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from lua-script" -l output -d "Output file" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from lua-script" -l installer-template -d "Custom installer template" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from lua-script" -l target-category -d "Target category"
+complete -c resolvescript -n "__fish_seen_subcommand_from lua-script" -l no-force -d "Fail if output already exists"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from install" -l scripts-root -d "Override Scripts root" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from install" -l locked -d "Fail if artifacts no longer satisfy"
+complete -c resolvescript -n "__fish_seen_subcommand_from install" -l dry-run -d "Show what would change"
+
+complete -c resolvescript -n "__fish_seen_subcommand_from add" -l scripts-root -d "Override Scripts root" -r
+complete -c resolvescript -n "__fish_seen_subcommand_from add" -l target -d "Override install target"
+complete -c resolvescript -n "__fish_seen_subcommand_from add" -l no-save -d "Install without recording"
+""")
+    else:
+        print(f"Unknown shell: {shell}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -900,6 +1212,32 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         print(f"resolvescript: analyze: {exc}", file=sys.stderr)
         return 1
     analysis = analyze_project(Path.cwd(), manifest)
+    if getattr(args, "json", False):
+        print(issues_to_json(analysis))
+        return 0
+    if not analysis.issues:
+        for line in analysis.api_report():
+            print(line)
+        print("no issues found")
+        return 0
+    for issue in analysis.issues:
+        where = f"{issue.file}:{issue.line}" if issue.file else "-"
+        print(f"[{issue.severity.upper()}] {issue.code} {where}: {issue.message}")
+    for line in analysis.api_report():
+        print(line)
+    return 1 if any(i.severity == "error" for i in analysis.issues) else 0
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    from .analyze import analyze_project, issues_to_json
+
+    target = Path(args.dir).expanduser() if args.dir else Path.cwd()
+    try:
+        manifest, _path = _load_manifest_from(target)
+    except ManifestError as exc:
+        print(f"resolvescript: validate: {exc}", file=sys.stderr)
+        return 1
+    analysis = analyze_project(target, manifest)
     if getattr(args, "json", False):
         print(issues_to_json(analysis))
         return 0
@@ -992,6 +1330,72 @@ def _cmd_dev(args: argparse.Namespace) -> int:
         print("Some checks failed.")
         return 1
     print("All checks passed.")
+    return 0
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    """Watch for file changes and rebuild/install (hot dev loop)."""
+    import time
+    from pathlib import Path
+
+    target = Path(args.dir).expanduser() if args.dir else Path.cwd()
+
+    try:
+        manifest, _path = _load_manifest_from(target)
+    except ManifestError as exc:
+        print(f"resolvescript: watch: {exc}", file=sys.stderr)
+        return 1
+
+    last_mtimes: dict[Path, float] = {}
+
+    def scan_sources():
+        mtimes = {}
+        for ext in (".py", ".json", ".xml", ".lua", ".toml"):
+            for f in target.rglob(f"*{ext}"):
+                if "__pycache__" in f.parts or ".git" in f.parts:
+                    continue
+                with contextlib.suppress(OSError):
+                    mtimes[f] = f.stat().st_mtime
+        return mtimes
+
+    def rebuild():
+        print("  → changes detected, rebuilding...")
+        try:
+            from .consolidate import BuildConfig, consolidate
+            config = BuildConfig(
+                package_root=target,
+                output=None,
+                entry=manifest.consolidate.entry,
+                exclude=manifest.consolidate.exclude,
+                no_comment=manifest.consolidate.no_comment,
+            )
+            result = consolidate(config)
+            print(f"  ✓ rebuilt: {result.output}")
+            if args.install:
+                from .install import install_project
+                from .install.installer import InstallOptions
+                scripts_root = _resolve_scripts_root(None, cwd=target, manifest=manifest)
+                install_project(target, InstallOptions(scripts_root=scripts_root), manifest=manifest)
+                print(f"  ✓ installed to {scripts_root}")
+        except Exception as exc:
+            print(f"  ✗ rebuild failed: {exc}")
+
+    print(f"Watching {target} for changes (Ctrl+C to stop)...")
+    if args.install:
+        print("  Auto-install enabled (requires restart Resolve to see changes)")
+
+    last_mtimes = scan_sources()
+    rebuild()
+
+    try:
+        while True:
+            time.sleep(args.interval)
+            current = scan_sources()
+            if current != last_mtimes:
+                last_mtimes = current
+                rebuild()
+    except KeyboardInterrupt:
+        print("\nStopped.")
     return 0
 
 
@@ -1435,6 +1839,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--editor", action="store_true", help="print the in-app Resolve script to run")
     p.set_defaults(func=_cmd_dev)
 
+    p = sub.add_parser("watch", help="watch for changes and rebuild/install (hot dev loop)")
+    p.add_argument("--dir", help="project directory (default: cwd)")
+    p.add_argument("--interval", type=float, default=1.0, help="poll interval in seconds (default: 1.0)")
+    p.add_argument("--install", action="store_true", help="auto-install after rebuild")
+    p.set_defaults(func=_cmd_watch)
+
     p = sub.add_parser("test", help="run the extension's pytest suite against the mock API")
     p.add_argument("--built", action="store_true", help="test the consolidated single file")
     p.add_argument("-k", dest="pattern", help="only run tests matching the expression")
@@ -1444,6 +1854,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("analyze", help="static checks on the extension (imports, manifest, API usage)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=_cmd_analyze)
+
+    p = sub.add_parser("validate", help="one-shot manifest + code check (alias for analyze)")
+    p.add_argument("--dir", help="project directory (default: cwd)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(func=_cmd_validate)
 
     p = sub.add_parser("build", help="consolidate the multi-file package into a single file")
     p.add_argument("--output", help="output path (default: dist/<manifest output>)")
@@ -1458,9 +1873,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_build)
 
+    p = sub.add_parser("lua-script", help="generate a Lua installer file (drag into Fusion Console)")
+    p.add_argument("--dir", help="project directory (default: cwd)")
+    p.add_argument("--output", help="output file path (default: dist/<name>_installer.lua)")
+    p.add_argument(
+        "--installer-template",
+        help="path to a custom installer template (default: project's installer.lua.j2)",
+    )
+    p.add_argument(
+        "--target-category",
+        default="Scripts/Utility",
+        help="target category for the installer (default: Scripts/Utility)",
+    )
+    p.add_argument("--no-force", action="store_true", help="fail if output already exists")
+    p.set_defaults(func=_cmd_lua_script)
+
     p = sub.add_parser("package", help="assemble release artifacts into dist/")
     p.add_argument("--dist", help="output directory (default: dist/)")
     p.set_defaults(func=_cmd_package)
+
+    p = sub.add_parser("publish", help="package and publish to GitHub Releases (requires gh CLI)")
+    p.add_argument("--dist", help="output directory (default: dist/)")
+    p.add_argument("--github-release", action="store_true", help="create GitHub release via gh CLI")
+    p.add_argument("--draft", action="store_true", help="create as draft release")
+    p.add_argument("--prerelease", action="store_true", help="mark as pre-release")
+    p.set_defaults(func=_cmd_publish)
 
     p = sub.add_parser("add", help="install a Resolve script and record it in resolvescript.json")
     p.add_argument("spec", help="specifier (name, owner/repo, github:, URL, archive, file:, ./dir)")
@@ -1505,6 +1942,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scripts-root", help="override OS-detected Scripts root / RESOLVESCRIPT_SCRIPTS_ROOT")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=_cmd_doctor)
+
+    p = sub.add_parser("context-menu", help="Windows context menu integration (Add to Resolve Scripts)")
+    p.add_argument("--unregister", action="store_true", help="remove context menu entry")
+    p.set_defaults(func=_cmd_context_menu)
+
+    p = sub.add_parser("completion", help="generate shell completion script")
+    p.add_argument("shell", choices=["bash", "zsh", "fish"], help="target shell")
+    p.set_defaults(func=_cmd_completion)
 
     p = sub.add_parser("clean", help="clean project caches, build artifacts, and registry files")
     p.add_argument("--dir", help="project directory (default: cwd)")

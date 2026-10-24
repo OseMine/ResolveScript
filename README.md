@@ -16,9 +16,15 @@ Build, test, package and install [DaVinci Resolve](https://www.blackmagicdesign.
 - `create` scaffolds a project with a `manifest.json` and smoke tests
 - `dev` / `test` run against a mock `DaVinciResolveScript` API - no Resolve needed
 - `build` consolidates the multi-file package into a single `.py` for distribution
+- `watch` hot-reloads on file changes (auto-rebuild + optional install)
 - `add` / `install` / `update` resolve dependencies from GitHub, URLs, archives or local folders and record them in `resolvescript.json`
 - `package` emits `dist/<name>-<version>.tar.gz` plus `SHA256SUMS.txt`
+- `publish` packages and publishes to GitHub Releases (via `gh` CLI)
 - `fuse` / `plugin` scaffold, validate, build, package and install Fusion `.fuse` plugins and precompiled `.plugin` binaries
+- `extensions` manages framework plugins that add commands, hooks, templates, sources to the CLI
+- `validate` one-shot manifest + code check
+- `completion` generates shell completions (bash/zsh/fish)
+- `context-menu` Windows Explorer integration
 
 Install with pip: `pip install resolvescript` (Python 3.9+).
 
@@ -66,19 +72,28 @@ my-cool-tool/
 | --- | --- |
 | `create <name>` | Scaffold a new project (`--json`/`--xml`, `--template minimal\|pydavinci\|davinci-rest\|lua\|workflow\|fuse\|ui\|extension`, `--dir`) |
 | `dev` | Sandboxed dev loop / REPL against the mock Resolve API (`--built` for the consolidated file, `--repl`, `--editor`) |
+| `watch` | Watch for changes and rebuild/install (hot dev loop; `--interval`, `--install`) |
 | `test` | Run the project's pytest suite against the mock API (`--built`, `-k pattern`, `--api-coverage`) |
 | `analyze` | Static checks: missing entrypoint/module, syntax, unused imports, unmocked API methods, attribute typing (`--json`) |
+| `validate` | One-shot manifest + code check (alias for `analyze`; `--dir`, `--json`) |
 | `build` | Consolidate into a single file (`--output`, or the manifest `consolidate.output`) |
+| `lua-script` | Generate a Lua installer file (`--dir`, `--output`, `--installer-template`, `--target-category`, `--no-force`) |
 | `package` | Assemble `dist/<name>-<version>.tar.gz` + `SHA256SUMS.txt` (`--dist DIR`) |
+| `publish` | Package and publish to GitHub Releases (`--github-release`, `--draft`, `--prerelease`) |
 | `add <spec>` | Resolve, install a dependency and record it (`--no-save`, `--target`, `--scripts-root`) |
 | `install [<spec>]` | One-off install, local project, **or** materialize recorded deps (`--locked`, `--dry-run`) |
 | `update [<name>]` | Re-resolve recorded deps within their ranges (`--precise X.Y.Z`, `--fix`) |
 | `remove <name>` | Uninstall and unrecord (`--no-save`) |
-| `search <query>` | Search the known sources table |
+| `search <query>` | Search the known sources table (uses static registry index) |
 | `doctor` | Diagnose environment, project manifest and install registry (`--json`, `--scripts-root`) |
 | `clean` | Clean project caches, build artifacts, and registry files (`--dir`, `-v`) |
+| `completion` | Generate shell completions (`bash`/`zsh`/`fish`) |
+| `context-menu` | Windows Explorer integration (`--unregister`) |
 | `manage list\|remove` | Low-level registry operations (`--json`, `--all`) |
 | `extensions add\|remove\|list` | Manage framework extensions (plugins) for the CLI itself (`--force`, `--json`) |
+| `plugin install\|list\|uninstall` | Deploy prebuilt Fusion `.plugin` binaries (`--name`, `--target`, `--notes`, `--no-force`, `--dry-run`, `--root`, `--json`) |
+| `workflow ...` | Build/install Workflow Integrations |
+| `fuse ...` | Build/install/package Fusion `.fuse` plugins |
 
 Exit codes: `0` ok, `1` error, `2` usage.
 

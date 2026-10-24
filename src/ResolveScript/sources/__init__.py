@@ -35,6 +35,14 @@ from .known import (
     lookup,
     search,
 )
+from .registry_index import (
+    RegistryIndex,
+    canonical_source_enhanced,
+    get_registry,
+    lookup_enhanced,
+    refresh_registry,
+    search_enhanced,
+)
 from .release import ReleaseError, ReleaseSpec, asset_download_url
 
 __all__ = [
@@ -44,18 +52,24 @@ __all__ = [
     "GitSourceError",
     "ReleaseError",
     "ReleaseSpec",
+    "RegistryIndex",
     "asset_download_url",
     "canonical_source",
+    "canonical_source_enhanced",
     "codeload_url",
     "default_branch",
     "download_github",
+    "get_registry",
     "is_archive_path",
     "known_names",
     "list_tags",
     "lookup",
+    "lookup_enhanced",
     "make_archive",
+    "refresh_registry",
     "resolve_tag",
     "search",
+    "search_enhanced",
     "tags_have_version",
     "unpack_archive",
 ]

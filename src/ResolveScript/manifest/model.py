@@ -158,10 +158,14 @@ class InstallConfig:
 
 @dataclass
 class RequiresConfig:
-    """Version gating for plugins."""
+    """Version gating for plugins and extensions."""
 
     resolvescript: str = ""
     python: str = ""
+    # Richer compat checks (P2)
+    resolve_version: str = ""       # e.g. ">=18.5", "18.6", ">=18.0 <19.0"
+    resolve_edition: str = ""       # "free" | "studio" | "both"
+    dist_tag: str = ""              # "latest" | "stable" | "beta" | "nightly"
 
     def as_dict(self) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -169,6 +173,12 @@ class RequiresConfig:
             result["resolvescript"] = self.resolvescript
         if self.python:
             result["python"] = self.python
+        if self.resolve_version:
+            result["resolve_version"] = self.resolve_version
+        if self.resolve_edition:
+            result["resolve_edition"] = self.resolve_edition
+        if self.dist_tag:
+            result["dist_tag"] = self.dist_tag
         return result
 
     def is_satisfied(self) -> bool:
@@ -184,7 +194,22 @@ class RequiresConfig:
             py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
             if not matches(Version.parse(py_version), self.python):
                 return False
+        # Note: resolve_version and resolve_edition checks require Resolve API
+        # They are metadata for the registry/update system
         return True
+
+    def check_resolve_compat(self, resolve_ver: str, edition: str) -> bool:
+        """Check compatibility against a specific Resolve version/edition.
+
+        Args:
+            resolve_ver: Resolve version string (e.g. "18.6.4")
+            edition: "free" or "studio"
+        """
+        from ..semver import Version, matches
+
+        if self.resolve_version and not matches(Version.parse(resolve_ver), self.resolve_version):
+            return False
+        return not (self.resolve_edition and self.resolve_edition not in ("both", edition))
 
 
 @dataclass

@@ -18,7 +18,11 @@ from .errors import ResolveScriptError
 from .fetch import fetch, sha256_file
 from .manifest.json_reader import load_manifest
 from .semver import SemVerError, Version
-from .sources import known, unpack_archive
+from .sources import (
+    canonical_source_enhanced,
+    lookup_enhanced,
+    unpack_archive,
+)
 from .sources.git import download_github
 from .sources.release import ReleaseSpec, asset_download_url
 from .spec import Spec, SpecError, parse_specifier
@@ -82,13 +86,15 @@ def resolve_spec(
     logger.debug("resolving %r -> kind=%s source=%s", spec_text, spec.kind, spec.source)
 
     if spec.kind == "name":
-        entry = known.lookup(spec.source)
+        entry = lookup_enhanced(spec.source)
         if not entry:
             raise ResolveError(
                 f"unknown extension {spec.source!r} - use a github:owner/repo, "
                 "a URL, or an archive/path"
             )
-        spec = parse_specifier(entry["source"], cwd=cwd)
+        # Try canonical source from registry, else fall back to entry's source
+        source = canonical_source_enhanced(spec.source) or entry.get("source", "")
+        spec = parse_specifier(source, cwd=cwd)
 
     # -- path source -------------------------------------------------------
     if spec.kind == "path":

@@ -1,4 +1,4 @@
-"""Manifest model, readers (JSON/XML) and validation.
+"""Manifest model, readers (JSON/XML/TOML) and validation.
 
 Load a manifest from a file with format auto-detection::
 
@@ -34,6 +34,11 @@ from .validation import (
 )
 from .xml_reader import loads as loads_xml
 
+try:
+    from .toml_reader import loads as loads_toml
+except ImportError:
+    loads_toml = None  # type: ignore[assignment]
+
 __all__ = [
     "Compat",
     "ConsolidateConfig",
@@ -62,15 +67,34 @@ def load_manifest(path: str | Path) -> Manifest:
 
     - ``.json`` (incl. ``manifest.json``) -> JSON reader
     - ``.xml``  (incl. ``manifest.xml``)  -> XML reader
+    - ``.toml`` (incl. ``manifest.toml``) -> TOML reader
     """
     file_path = Path(path)
-    if file_path.suffix.lower() == ".xml":
+    suffix = file_path.suffix.lower()
+    if suffix == ".xml":
         return loads_xml(file_path.read_text(encoding="utf-8"), source=str(file_path))
+    if suffix == ".toml":
+        if loads_toml is None:
+            from .model import ManifestError
+            raise ManifestError(
+                "TOML support requires Python 3.11+ or the 'tomli' package (pip install tomli)",
+                path=str(file_path),
+            )
+        return loads_toml(file_path.read_text(encoding="utf-8"), source=str(file_path))
     return loads_json(file_path.read_text(encoding="utf-8"), source=str(file_path))
 
 
 def loads(text: str, *, fmt: str = "json", source: str = "<manifest>") -> Manifest:
-    """Parse manifest text; ``fmt`` is ``"json"`` (default) or ``"xml"``."""
-    if fmt.lower() == "xml":
+    """Parse manifest text; ``fmt`` is ``"json"`` (default), ``"xml"``, or ``"toml"``."""
+    fmt = fmt.lower()
+    if fmt == "xml":
         return loads_xml(text, source=source)
+    if fmt == "toml":
+        if loads_toml is None:
+            from .model import ManifestError
+            raise ManifestError(
+                "TOML support requires Python 3.11+ or the 'tomli' package (pip install tomli)",
+                path=source,
+            )
+        return loads_toml(text, source=source)
     return loads_json(text, source=source)

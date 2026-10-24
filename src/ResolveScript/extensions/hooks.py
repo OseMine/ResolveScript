@@ -75,3 +75,92 @@ def dispatch_plugin_hooks(hook_name: str, *args, **kwargs) -> list[tuple[str, An
                 file=sys.stderr,
             )
     return results
+
+
+def get_plugin_sources() -> dict[str, list[str]]:
+    """Get all sources contributed by plugins.
+
+    Returns a dict of {plugin_name: [source_specs]}.
+    """
+    sources: dict[str, list[str]] = {}
+    try:
+        entries = discover_plugins()
+    except PluginError:
+        return sources
+
+    for entry in entries:
+        try:
+            entry.manifest.check_requires()
+            if entry.manifest.sources:
+                sources[entry.name] = list(entry.manifest.sources)
+        except PluginError:
+            pass  # Skip plugins that fail version gate
+    return sources
+
+
+def get_plugin_templates() -> dict[str, list[str]]:
+    """Get all templates contributed by plugins.
+
+    Returns a dict of {plugin_name: [template_names]}.
+    """
+    templates: dict[str, list[str]] = {}
+    try:
+        entries = discover_plugins()
+    except PluginError:
+        return templates
+
+    for entry in entries:
+        try:
+            entry.manifest.check_requires()
+            if entry.manifest.templates:
+                templates[entry.name] = list(entry.manifest.templates)
+        except PluginError:
+            pass
+    return templates
+
+
+def get_plugin_provides() -> dict[str, list[str]]:
+    """Get all provides contributed by plugins.
+
+    Returns a dict of {plugin_name: [provides_specs]}.
+    """
+    provides: dict[str, list[str]] = {}
+    try:
+        entries = discover_plugins()
+    except PluginError:
+        return provides
+
+    for entry in entries:
+        try:
+            entry.manifest.check_requires()
+            if entry.manifest.provides:
+                provides[entry.name] = list(entry.manifest.provides)
+        except PluginError:
+            pass
+    return provides
+
+
+def get_plugin_contributions() -> dict[str, dict]:
+    """Get all plugin contributions in one call.
+
+    Returns a dict of {plugin_name: {sources, templates, provides, hooks, commands}}.
+    """
+    contributions: dict[str, dict] = {}
+    try:
+        entries = discover_plugins()
+    except PluginError:
+        return contributions
+
+    for entry in entries:
+        try:
+            entry.manifest.check_requires()
+            contributions[entry.name] = {
+                "sources": list(entry.manifest.sources),
+                "templates": list(entry.manifest.templates),
+                "provides": list(entry.manifest.provides),
+                "hooks": dict(entry.manifest.hooks),
+                "commands": list(entry.manifest.commands),
+            }
+        except PluginError:
+            pass
+    return contributions

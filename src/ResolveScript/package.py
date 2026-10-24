@@ -29,6 +29,7 @@ class PackageResult:
     sha256: str
     files: list[str] = field(default_factory=list)
     checksum_file: Path | None = None
+    manifest: Manifest | None = field(default=None, repr=False)
 
 
 def _sha256(path: Path) -> str:
